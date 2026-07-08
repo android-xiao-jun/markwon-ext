@@ -1,0 +1,18 @@
+plugins {
+    id 'com.android.library'
+}
+
+android {
+    compileSdk 34
+//    buildToolsVersion cfg.buildToolsVersion
+
+    defaultConfig {
+        minSdk 21
+    }
+}
+
+dependencies {
+    implementation 'io.noties.markwon:core:4.6.2'
+    implementation("com.atlassian.commonmark:commonmark:0.13.0")
+    implementation("com.atlassian.commonmark:commonmark-ext-gfm-tables:0.13.0")
+}

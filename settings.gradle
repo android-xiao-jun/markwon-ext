@@ -1,0 +1,26 @@
+//pluginManagement {
+//    repositories {
+//        mavenLocal()
+//        gradlePluginPortal()
+//        mavenCentral()
+//        maven { url 'https://www.jitpack.io' }
+//        google()
+//        maven {
+//            setUrl("repo")
+//        }
+//    }
+//}
+//dependencyResolutionManagement {
+//    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+//    repositories {
+//        mavenLocal()
+//        mavenCentral()
+//        maven { url 'https://www.jitpack.io' }
+//        google()
+//        maven {
+//            setUrl("repo")
+//        }
+//    }
+//}
+
+include ':markwon-ext-tables'

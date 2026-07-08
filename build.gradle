@@ -1,0 +1,38 @@
+buildscript {
+    dependencies {
+        classpath 'com.android.tools.build:gradle:4.1.1'
+        classpath 'com.neenbedankt.gradle.plugins:android-apt:1.8'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.6.21"
+    }
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+        google()
+        maven {
+            setUrl("repo")
+        }
+    }
+}
+
+allprojects {
+    repositories {
+        mavenLocal()
+        gradlePluginPortal()
+        mavenCentral()
+        maven { url 'https://www.jitpack.io' }
+        google()
+        maven {
+            setUrl("repo")
+        }
+    }
+}
+
+//plugins {
+//    id 'com.android.application' version '8.0.0' apply false
+//    id 'com.android.library' version '8.0.0' apply false
+//    id 'org.jetbrains.kotlin.android' version '1.8.0' apply false
+//    id 'org.jetbrains.kotlin.jvm' version '1.8.0' apply false
+//    id 'org.jetbrains.kotlin.kapt' version '1.8.0' apply false
+//}
