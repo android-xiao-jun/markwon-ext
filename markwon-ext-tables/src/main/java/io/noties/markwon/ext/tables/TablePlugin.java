@@ -201,9 +201,9 @@ public class TablePlugin extends AbstractMarkwonPlugin {
                 // @since 1.0.4 Replace table char with non-breakable space
                 // we need this because if table is at the end of the text, then it will be
                 // trimmed from the final result
-                builder.append('\u00a0');
+//                builder.append('\u00a0');
 
-                final Object span = new TableRowSpan(
+                final TableRowSpan span = new TableRowSpan(
                         tableTheme,
                         pendingTableRow,
                         tableRowIsHeader,
@@ -212,6 +212,8 @@ public class TablePlugin extends AbstractMarkwonPlugin {
                 tableRows = tableRowIsHeader
                         ? 0
                         : tableRows + 1;
+
+                builder.append(span.copyText());
 
                 visitor.setSpans(addNewLine ? length + 1 : length, span);
 
