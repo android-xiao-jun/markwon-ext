@@ -461,4 +461,24 @@ public class TableRowSpan extends ReplacementSpan {
 
         }
     }
+
+    public String copyText(){
+        StringBuilder sb = new StringBuilder();
+
+        for (int i = 0; i < cells.size(); i++) {
+
+            CharSequence text = cells.get(i).text();
+
+            if (text instanceof Spanned) {
+                sb.append(text.toString());
+            } else {
+                sb.append(text);
+            }
+
+            if (i != cells.size() - 1) {
+                sb.append('\t');      // 或 " | "
+            }
+        }
+
+        return sb.toString();    }
 }
