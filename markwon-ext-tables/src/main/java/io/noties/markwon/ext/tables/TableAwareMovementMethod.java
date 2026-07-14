@@ -62,7 +62,7 @@ public class TableAwareMovementMethod implements MovementMethod {
                 break;
 
             case MotionEvent.ACTION_MOVE:
-                if (activeTableSpan != null) {
+                if (activeTableSpan != null && activeTableSpan.isScrollEnabled()) {
                     final float dx = Math.abs(event.getX() - downX);
                     final float dy = Math.abs(event.getY() - downY);
 

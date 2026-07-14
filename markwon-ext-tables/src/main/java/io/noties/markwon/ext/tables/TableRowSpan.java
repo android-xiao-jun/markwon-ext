@@ -144,15 +144,26 @@ public class TableRowSpan extends ReplacementSpan {
             int y,
             int bottom,
             @NonNull Paint p) {
-        final int scrollX = tableSpan.getScrollX();
+        final boolean scrollEnabled = tableSpan.isScrollEnabled();
+        final int scrollX = scrollEnabled ? tableSpan.getScrollX() : 0;
 
         // Detect the real viewport width from the canvas, which may differ from
         // the width reported by SpanUtils during getSize(). This is essential for
         // correct scroll-range calculation.
         canvas.getClipBounds(rect);
         final int viewportWidth = rect.width();
-        if (viewportWidth > 0 && viewportWidth != tableSpan.getTextViewWidth()) {
+        if (viewportWidth > 0) {
+            final boolean widthChanged = (viewportWidth != tableSpan.getTextViewWidth());
             tableSpan.setTextViewWidth(viewportWidth);
+
+            if (!scrollEnabled && widthChanged && tableSpan.getTableWidth() != viewportWidth) {
+                tableSpan.committedWidth = viewportWidth;
+                tableSpan.invalidateLayouts();
+                if (invalidator != null) {
+                    invalidator.invalidate();
+                }
+                return;
+            }
         }
 
         final int padding = theme.tableCellPadding();
@@ -213,13 +224,15 @@ public class TableRowSpan extends ReplacementSpan {
             }
         }
 
-        // 4. Scrollbar
-        final int drawableWidth = tableSpan.getTextViewWidth();
-        if (tableTotalWidth > drawableWidth) {
-            final Spanned spanned = (Spanned) text;
-            TableSpan[] allTableSpans = spanned.getSpans(start, end, TableSpan.class);
-            if (allTableSpans.length > 0 && spanned.getSpanEnd(allTableSpans[0]) == end) {
-                drawScrollbar(canvas, bottom - top, scrollX, drawableWidth);
+        // 4. Scrollbar (only when scrolling is enabled and content exceeds viewport)
+        if (scrollEnabled) {
+            final int drawableWidth = tableSpan.getTextViewWidth();
+            if (tableTotalWidth > drawableWidth) {
+                final Spanned spanned = (Spanned) text;
+                TableSpan[] allTableSpans = spanned.getSpans(start, end, TableSpan.class);
+                if (allTableSpans.length > 0 && spanned.getSpanEnd(allTableSpans[0]) == end) {
+                    drawScrollbar(canvas, bottom - top, scrollX, drawableWidth);
+                }
             }
         }
 

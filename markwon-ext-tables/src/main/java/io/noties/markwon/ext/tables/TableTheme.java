@@ -59,6 +59,10 @@ public class TableTheme {
     // Maximum width of a single column. A non-positive value means no limit.
     protected final int tableMaxColumnWidth;
 
+    // @since 6.4.3 — whether the table can scroll horizontally.
+    // When false the table is constrained to the viewport width and touch-scrolling is disabled.
+    protected final boolean tableScrollEnabled;
+
     protected TableTheme(@NonNull Builder builder) {
         this.tableCellPadding = builder.tableCellPadding;
         this.tableBorderColor = builder.tableBorderColor;
@@ -67,6 +71,7 @@ public class TableTheme {
         this.tableEvenRowBackgroundColor = builder.tableEvenRowBackgroundColor;
         this.tableHeaderRowBackgroundColor = builder.tableHeaderRowBackgroundColor;
         this.tableMaxColumnWidth = builder.tableMaxColumnWidth;
+        this.tableScrollEnabled = builder.tableScrollEnabled;
     }
 
     /**
@@ -81,7 +86,8 @@ public class TableTheme {
                 .tableOddRowBackgroundColor(tableOddRowBackgroundColor)
                 .tableEvenRowBackgroundColor(tableEvenRowBackgroundColor)
                 .tableHeaderRowBackgroundColor(tableHeaderRowBackgroundColor)
-                .tableMaxColumnWidth(tableMaxColumnWidth);
+                .tableMaxColumnWidth(tableMaxColumnWidth)
+                .tableScrollEnabled(tableScrollEnabled);
     }
 
     public int tableCellPadding() {
@@ -94,6 +100,14 @@ public class TableTheme {
      */
     public int tableMaxColumnWidth() {
         return tableMaxColumnWidth;
+    }
+
+    /**
+     * Returns whether horizontal scrolling is enabled for this table.
+     * When false the table width is constrained to the viewport.
+     */
+    public boolean isTableScrollEnabled() {
+        return tableScrollEnabled;
     }
 
     public int tableBorderWidth(@NonNull Paint paint) {
@@ -157,6 +171,7 @@ public class TableTheme {
         private int tableEvenRowBackgroundColor; // @since 1.1.1
         private int tableHeaderRowBackgroundColor; // @since 1.1.1
         private int tableMaxColumnWidth;
+        private boolean tableScrollEnabled = false;
 
         @NonNull
         public Builder tableCellPadding(@Px int tableCellPadding) {
@@ -201,6 +216,12 @@ public class TableTheme {
         @NonNull
         public Builder tableMaxColumnWidth(@Px int tableMaxColumnWidth) {
             this.tableMaxColumnWidth = tableMaxColumnWidth;
+            return this;
+        }
+
+        @NonNull
+        public Builder tableScrollEnabled(boolean enabled) {
+            this.tableScrollEnabled = enabled;
             return this;
         }
 

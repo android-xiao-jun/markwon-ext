@@ -19,11 +19,11 @@ public class TableSpan {
     private int rowContentHeight;
     private int layoutWidth = -1;
     private boolean layoutsDirty = true;
-    private int committedWidth = -1;
+    int committedWidth = -1;
+    private boolean scrollEnabled = true;
 
     void reset() {
         scrollX = 0;
-        committedWidth = -1;
     }
 
     void addRow(TableRowSpan row) {
@@ -63,32 +63,49 @@ public class TableSpan {
             return;
         }
 
+        scrollEnabled = theme.isTableScrollEnabled();
         final int padding = theme.tableCellPadding() * 2;
-        final int configuredMax = theme.tableMaxColumnWidth();
-        final int minColumnWidth = Math.max(1, availableWidth / 4);
-        final int effectiveMinColumnWidth = configuredMax > 0
-                ? Math.min(minColumnWidth, configuredMax)
-                : minColumnWidth;
-        final int[] sharedColumnWidths = new int[columnCount];
-        Arrays.fill(sharedColumnWidths, effectiveMinColumnWidth);
 
-        for (TableRowSpan row : rows) {
-            final int[] desiredWidths = row.desiredColumnWidths(textPaint, padding);
-            for (int i = 0; i < desiredWidths.length; i++) {
-                int desired = Math.max(desiredWidths[i], effectiveMinColumnWidth);
-                if (configuredMax > 0) {
-                    desired = Math.min(desired, configuredMax);
-                }
-                sharedColumnWidths[i] = Math.max(sharedColumnWidths[i], desired);
+        final int[] sharedColumnWidths;
+        int totalWidth;
+
+        if (!scrollEnabled) {
+            // Equal-width columns: each cell gets an equal share of the viewport.
+            // tableMaxColumnWidth has no effect when scrolling is disabled.
+            sharedColumnWidths = new int[columnCount];
+            final int baseWidth = availableWidth / columnCount;
+            int remainder = availableWidth - baseWidth * columnCount;
+            for (int i = 0; i < columnCount; i++) {
+                sharedColumnWidths[i] = baseWidth + (i < remainder ? 1 : 0);
             }
-        }
+            totalWidth = availableWidth;
+        } else {
+            final int configuredMax = theme.tableMaxColumnWidth();
+            final int minColumnWidth = Math.max(1, availableWidth / 4);
+            final int effectiveMinColumnWidth = configuredMax > 0
+                    ? Math.min(minColumnWidth, configuredMax)
+                    : minColumnWidth;
+            sharedColumnWidths = new int[columnCount];
+            Arrays.fill(sharedColumnWidths, effectiveMinColumnWidth);
 
-        int totalWidth = sum(sharedColumnWidths);
-        if (totalWidth < availableWidth) {
-            totalWidth = expandToAvailableWidth(
-                    sharedColumnWidths,
-                    availableWidth,
-                    configuredMax);
+            for (TableRowSpan row : rows) {
+                final int[] desiredWidths = row.desiredColumnWidths(textPaint, padding);
+                for (int i = 0; i < desiredWidths.length; i++) {
+                    int desired = Math.max(desiredWidths[i], effectiveMinColumnWidth);
+                    if (configuredMax > 0) {
+                        desired = Math.min(desired, configuredMax);
+                    }
+                    sharedColumnWidths[i] = Math.max(sharedColumnWidths[i], desired);
+                }
+            }
+
+            totalWidth = sum(sharedColumnWidths);
+            if (totalWidth < availableWidth) {
+                totalWidth = expandToAvailableWidth(
+                        sharedColumnWidths,
+                        availableWidth,
+                        configuredMax);
+            }
         }
 
         tableWidth = totalWidth;
@@ -167,8 +184,16 @@ public class TableSpan {
     }
 
     public void setScrollX(int scrollX) {
+        if (!scrollEnabled) {
+            this.scrollX = 0;
+            return;
+        }
         int maxScroll = Math.max(0, tableWidth - textViewWidth);
         this.scrollX = Math.min(Math.max(0, scrollX), maxScroll);
+    }
+
+    public boolean isScrollEnabled() {
+        return scrollEnabled;
     }
 
     public int getTableWidth() {
