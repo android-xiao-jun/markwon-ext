@@ -27,7 +27,6 @@ import io.noties.markwon.core.spans.TextLayoutSpan;
 import io.noties.markwon.image.AsyncDrawable;
 import io.noties.markwon.image.AsyncDrawableSpan;
 import io.noties.markwon.utils.LeadingMarginUtils;
-import io.noties.markwon.utils.SpanUtils;
 
 public class TableRowSpan extends ReplacementSpan {
 
