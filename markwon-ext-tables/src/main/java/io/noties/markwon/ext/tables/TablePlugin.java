@@ -103,6 +103,7 @@ public class TablePlugin extends AbstractMarkwonPlugin {
         private List<TableRowSpan.Cell> pendingTableRow;
         private boolean tableRowIsHeader;
         private int tableRows;
+        private TableSpan currentTableSpan;
 
         TableVisitor(@NonNull TableTheme tableTheme) {
             this.tableTheme = tableTheme;
@@ -112,6 +113,7 @@ public class TablePlugin extends AbstractMarkwonPlugin {
             pendingTableRow = null;
             tableRowIsHeader = false;
             tableRows = 0;
+            currentTableSpan = null;
         }
 
         void configure(@NonNull MarkwonVisitor.Builder builder) {
@@ -124,11 +126,15 @@ public class TablePlugin extends AbstractMarkwonPlugin {
                             visitor.blockStart(tableBlock);
 
                             final int length = visitor.length();
+                            final TableSpan previousTableSpan = currentTableSpan;
+                            final TableSpan tableSpan = new TableSpan();
+                            currentTableSpan = tableSpan;
 
                             visitor.visitChildren(tableBlock);
 
                             // @since 4.3.1 apply table span for the full table
-                            visitor.setSpans(length, new TableSpan());
+                            visitor.setSpans(length, tableSpan);
+                            currentTableSpan = previousTableSpan;
 
                             visitor.blockEnd(tableBlock);
                         }
@@ -203,8 +209,12 @@ public class TablePlugin extends AbstractMarkwonPlugin {
                 // trimmed from the final result
 //                builder.append('\u00a0');
 
+                final TableSpan tableSpan = currentTableSpan != null
+                        ? currentTableSpan
+                        : new TableSpan();
                 final TableRowSpan span = new TableRowSpan(
                         tableTheme,
+                        tableSpan,
                         pendingTableRow,
                         tableRowIsHeader,
                         tableRows % 2 == 1);

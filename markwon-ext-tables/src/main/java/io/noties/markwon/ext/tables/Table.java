@@ -164,7 +164,7 @@ public class Table {
                     pendingRow = new ArrayList<>(2);
                 }
 
-                pendingRow.add(new Table.Column(alignment(cell.getAlignment()), markwon.render(cell)));
+                pendingRow.add(new Column(alignment(cell.getAlignment()), markwon.render(cell)));
                 pendingRowIsHeader = cell.isHeader();
 
                 return;
@@ -182,7 +182,7 @@ public class Table {
                         rows = new ArrayList<>(2);
                     }
 
-                    rows.add(new Table.Row(pendingRowIsHeader, pendingRow));
+                    rows.add(new Row(pendingRowIsHeader, pendingRow));
                 }
 
                 pendingRow = null;
@@ -195,14 +195,14 @@ public class Table {
         }
 
         @NonNull
-        private static Table.Alignment alignment(@NonNull TableCell.Alignment alignment) {
-            final Table.Alignment out;
+        private static Alignment alignment(@NonNull TableCell.Alignment alignment) {
+            final Alignment out;
             if (TableCell.Alignment.RIGHT == alignment) {
-                out = Table.Alignment.RIGHT;
+                out = Alignment.RIGHT;
             } else if (TableCell.Alignment.CENTER == alignment) {
-                out = Table.Alignment.CENTER;
+                out = Alignment.CENTER;
             } else {
-                out = Table.Alignment.LEFT;
+                out = Alignment.LEFT;
             }
             return out;
         }

@@ -65,7 +65,9 @@ abstract class TableRowsScheduler {
         if (spans != null
                 && spans.length > 0) {
             for (Object span : spans) {
-                ((TableRowSpan) span).invalidator(null);
+                final TableRowSpan tableRowSpan = (TableRowSpan) span;
+                tableRowSpan.invalidator(null);
+                tableRowSpan.getTableSpan().reset();
             }
         }
     }

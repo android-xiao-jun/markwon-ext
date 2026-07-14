@@ -23,7 +23,8 @@ public class TableTheme {
         final Dip dip = Dip.create(context);
         return emptyBuilder()
                 .tableCellPadding(dip.toPx(4))
-                .tableBorderWidth(dip.toPx(1));
+                .tableBorderWidth(dip.toPx(1))
+                .tableMaxColumnWidth(dip.toPx(200));
     }
 
     @NonNull
@@ -55,6 +56,9 @@ public class TableTheme {
     // by default no background
     protected final int tableHeaderRowBackgroundColor;
 
+    // Maximum width of a single column. A non-positive value means no limit.
+    protected final int tableMaxColumnWidth;
+
     protected TableTheme(@NonNull Builder builder) {
         this.tableCellPadding = builder.tableCellPadding;
         this.tableBorderColor = builder.tableBorderColor;
@@ -62,6 +66,7 @@ public class TableTheme {
         this.tableOddRowBackgroundColor = builder.tableOddRowBackgroundColor;
         this.tableEvenRowBackgroundColor = builder.tableEvenRowBackgroundColor;
         this.tableHeaderRowBackgroundColor = builder.tableHeaderRowBackgroundColor;
+        this.tableMaxColumnWidth = builder.tableMaxColumnWidth;
     }
 
     /**
@@ -75,11 +80,20 @@ public class TableTheme {
                 .tableBorderWidth(tableBorderWidth)
                 .tableOddRowBackgroundColor(tableOddRowBackgroundColor)
                 .tableEvenRowBackgroundColor(tableEvenRowBackgroundColor)
-                .tableHeaderRowBackgroundColor(tableHeaderRowBackgroundColor);
+                .tableHeaderRowBackgroundColor(tableHeaderRowBackgroundColor)
+                .tableMaxColumnWidth(tableMaxColumnWidth);
     }
 
     public int tableCellPadding() {
         return tableCellPadding;
+    }
+
+    /**
+     * Returns the maximum width of one table column in pixels.
+     * A non-positive value disables the limit.
+     */
+    public int tableMaxColumnWidth() {
+        return tableMaxColumnWidth;
     }
 
     public int tableBorderWidth(@NonNull Paint paint) {
@@ -142,6 +156,7 @@ public class TableTheme {
         private int tableOddRowBackgroundColor;
         private int tableEvenRowBackgroundColor; // @since 1.1.1
         private int tableHeaderRowBackgroundColor; // @since 1.1.1
+        private int tableMaxColumnWidth;
 
         @NonNull
         public Builder tableCellPadding(@Px int tableCellPadding) {
@@ -176,6 +191,16 @@ public class TableTheme {
         @NonNull
         public Builder tableHeaderRowBackgroundColor(@ColorInt int tableHeaderRowBackgroundColor) {
             this.tableHeaderRowBackgroundColor = tableHeaderRowBackgroundColor;
+            return this;
+        }
+
+        /**
+         * Sets the maximum width of one table column in pixels.
+         * Pass a non-positive value to disable the limit.
+         */
+        @NonNull
+        public Builder tableMaxColumnWidth(@Px int tableMaxColumnWidth) {
+            this.tableMaxColumnWidth = tableMaxColumnWidth;
             return this;
         }
 
