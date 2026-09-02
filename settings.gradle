@@ -23,4 +23,21 @@
 //    }
 //}
 
-include ':markwon-ext-tables'
+include ':markwon-core',
+        ':markwon-editor',
+        ':markwon-ext-latex',
+        ':markwon-ext-strikethrough',
+        ':markwon-ext-tables',
+        ':markwon-ext-tasklist',
+        ':markwon-html',
+        ':markwon-image',
+        ':markwon-image-glide',
+        ':markwon-inline-parser',
+        ':markwon-linkify',
+        ':markwon-recycler',
+        ':markwon-recycler-table',
+        ':markwon-simple-ext',
+        ':markwon-syntax-highlight'
+
+//include ':app-sample'
+//include ':sample-utils:processor'

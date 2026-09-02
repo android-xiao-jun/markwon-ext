@@ -4,16 +4,21 @@ plugins {
 apply from: rootProject.file('gradle/maven-publish.gradle')
 
 android {
-    compileSdk 34
-//    buildToolsVersion cfg.buildToolsVersion
+    compileSdkVersion config['compile-sdk']
+    buildToolsVersion config['build-tools']
 
     defaultConfig {
-        minSdk 21
+        minSdkVersion config['min-sdk']
+        targetSdkVersion config['target-sdk']
+        versionCode 1
+        versionName version
     }
 }
 
 dependencies {
-    implementation 'io.noties.markwon:core:4.6.2'
-    implementation("com.atlassian.commonmark:commonmark:0.13.0")
-    implementation("com.atlassian.commonmark:commonmark-ext-gfm-tables:0.13.0")
+    api project(':markwon-core')
+
+    deps.with {
+        api it['commonmark-table']
+    }
 }

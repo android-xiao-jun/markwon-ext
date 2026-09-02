@@ -1,32 +1,33 @@
 buildscript {
-    dependencies {
-        classpath 'com.android.tools.build:gradle:4.1.1'
-        classpath 'com.neenbedankt.gradle.plugins:android-apt:1.8'
-        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.6.21"
-    }
+    ext.kotlin_version = '1.4.10'
     repositories {
-        mavenLocal()
-        gradlePluginPortal()
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://jitpack.io' }
         mavenCentral()
-        maven { url 'https://www.jitpack.io' }
         google()
-        maven {
-            setUrl("repo")
-        }
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:4.0.2'
+//        classpath 'com.github.ben-manes:gradle-versions-plugin:0.28.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
     }
 }
 
 allprojects {
     repositories {
-        mavenLocal()
-        gradlePluginPortal()
-        mavenCentral()
-        maven { url 'https://www.jitpack.io' }
-        google()
-        maven {
-            setUrl("repo")
+        if (project.hasProperty('LOCAL_MAVEN_URL')) {
+            maven { url LOCAL_MAVEN_URL }
         }
+        maven { url 'https://maven.aliyun.com/repository/public' }
+        maven { url 'https://maven.aliyun.com/repository/google' }
+        maven { url 'https://maven.aliyun.com/repository/gradle-plugin' }
+        maven { url 'https://jitpack.io' }
+        mavenCentral()
+        google()
     }
+
 }
 
 //plugins {
@@ -36,3 +37,73 @@ allprojects {
 //    id 'org.jetbrains.kotlin.jvm' version '1.8.0' apply false
 //    id 'org.jetbrains.kotlin.kapt' version '1.8.0' apply false
 //}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}
+
+wrapper {
+    gradleVersion '6.1.1'
+    distributionType 'all'
+}
+
+ext {
+
+    config = [
+            'build-tools'    : '29.0.3',
+            'compile-sdk'    : 29,
+            'target-sdk'     : 29,
+            'min-sdk'        : 16,
+    ]
+
+    final def commonMarkVersion = '0.13.0'
+    final def daggerVersion = '2.10'
+    final def coilVersion = '0.13.0'
+
+    // please note that `pl.droidsonroids.gif:android-gif-drawable:1.2.15` is used due to the minimum
+    // api level mismatch that Markwon supports (16) and later versions of AndroidGifDrawable (17).
+    // It should not be a problem as this dependency is used as `compileOnly` and users
+    // must specify version explicitly (until library's API changes...)
+
+    deps = [
+            'x-annotations'           : 'androidx.annotation:annotation:1.1.0',
+            'x-recycler-view'         : 'androidx.recyclerview:recyclerview:1.0.0',
+            'x-core'                  : 'androidx.core:core:1.0.2',
+            'x-appcompat'             : 'androidx.appcompat:appcompat:1.1.0',
+            'x-cardview'              : 'androidx.cardview:cardview:1.0.0',
+            'x-fragment'              : 'androidx.fragment:fragment:1.0.0',
+            'commonmark'              : "com.atlassian.commonmark:commonmark:$commonMarkVersion",
+            'commonmark-strikethrough': "com.atlassian.commonmark:commonmark-ext-gfm-strikethrough:$commonMarkVersion",
+            'commonmark-table'        : "com.atlassian.commonmark:commonmark-ext-gfm-tables:$commonMarkVersion",
+            'android-svg'             : 'com.caverock:androidsvg:1.4',
+            // we need 2 gif artifacts at long as we have a difference in version used for API compatibility
+            'android-gif'             : 'pl.droidsonroids.gif:android-gif-drawable:1.2.15',
+            'android-gif-impl'        : 'pl.droidsonroids.gif:android-gif-drawable:1.2.20',
+            'jlatexmath-android'      : 'ru.noties:jlatexmath-android:0.2.0',
+            'okhttp'                  : 'com.squareup.okhttp3:okhttp:3.9.0',
+            'prism4j'                 : 'io.noties:prism4j:2.0.0',
+            'debug'                   : 'io.noties:debug:5.1.0',
+            'adapt'                   : 'io.noties:adapt:2.2.0',
+            'dagger'                  : "com.google.dagger:dagger:$daggerVersion",
+            'picasso'                 : 'com.squareup.picasso:picasso:2.71828',
+            'glide'                   : 'com.github.bumptech.glide:glide:4.11.0',
+            'coil'                    : "io.coil-kt:coil:$coilVersion",
+            'coil-base'               : "io.coil-kt:coil-base:$coilVersion",
+            'ix-java'                 : 'com.github.akarnokd:ixjava:1.0.0',
+            'gson'                    : 'com.google.code.gson:gson:2.8.6',
+            'commons-io'              : 'commons-io:commons-io:2.6'
+    ]
+
+    deps['annotationProcessor'] = [
+            'prism4j-bundler': 'io.noties:prism4j-bundler:2.0.0',
+            'dagger-compiler': "com.google.dagger:dagger-compiler:$daggerVersion"
+    ]
+
+    deps['test'] = [
+            'junit'               : 'junit:junit:4.12',
+            'robolectric'         : 'org.robolectric:robolectric:3.8',
+            'mockito'             : 'org.mockito:mockito-core:2.21.0',
+            'commonmark-test-util': "com.atlassian.commonmark:commonmark-test-util:$commonMarkVersion",
+    ]
+
+}

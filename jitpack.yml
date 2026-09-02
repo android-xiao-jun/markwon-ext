@@ -5,4 +5,4 @@ before_install:
   - ./gradlew clean
 
 install:
-  - ./gradlew :markwon-ext-tables:publishToMavenLocal
+  - ./gradlew :markwon-core:publishToMavenLocal :markwon-editor:publishToMavenLocal :markwon-ext-latex:publishToMavenLocal :markwon-ext-strikethrough:publishToMavenLocal :markwon-ext-tables:publishToMavenLocal :markwon-ext-tasklist:publishToMavenLocal :markwon-html:publishToMavenLocal :markwon-image:publishToMavenLocal :markwon-image-glide:publishToMavenLocal :markwon-inline-parser:publishToMavenLocal :markwon-linkify:publishToMavenLocal :markwon-recycler:publishToMavenLocal :markwon-recycler-table:publishToMavenLocal :markwon-simple-ext:publishToMavenLocal :markwon-syntax-highlight:publishToMavenLocal
