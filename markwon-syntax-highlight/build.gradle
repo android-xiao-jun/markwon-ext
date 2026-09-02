@@ -19,7 +19,9 @@ dependencies {
     api project(':markwon-core')
 
     deps.with {
-        api it['prism4j']
+        api(it['prism4j']) {
+            exclude group: 'org.jetbrains', module: 'annotations-java5'
+        }
     }
 
     deps.with {
