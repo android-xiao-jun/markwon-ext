@@ -1,0 +1,85 @@
+# markwon-ext 全插件案例
+
+这一段把 app-sample 里注册的插件挨个走一遍，用来快速确认渲染链路是否通。
+
+## 一、内联语法（CorePlugin + MarkwonInlineParserPlugin）
+
+普通文本、**加粗**、*斜体*、`行内代码`、~~删除线~~、==高亮==、++下划线++。
+
+反斜杠转义：字面 \* 星号 和 \_ 下划线。
+
+## 二、代码块高亮（SyntaxHighlightPlugin）
+
+```java
+// 单行注释
+public final class Sample {
+    private static final int MAX = 1024;
+
+    public int sum(int a, int b) {
+        return a + b;
+    }
+}
+```
+
+```kotlin
+/* 块注释 */
+fun main() {
+    val list = listOf(1, 2, 3)
+    println(list.sum())
+}
+```
+
+```json
+{
+  "name": "markwon-ext",
+  "enabled": true,
+  "version": 4.6
+}
+```
+
+## 三、表格（TablePlugin）
+
+| 模块 | 作用 | 插件类 |
+| --- | --- | --- |
+| markwon-core | 基础渲染 | CorePlugin |
+| markwon-inline-parser | 内联解析增强 | MarkwonInlineParserPlugin |
+| markwon-ext-tables | GFM 表格 | TablePlugin |
+| markwon-ext-tasklist | 任务列表 | TaskListPlugin |
+| markwon-ext-strikethrough | 删除线 | StrikethroughPlugin |
+| markwon-ext-latex | 数学公式 | JLatexMathPlugin |
+| markwon-html | HTML 标签 | HtmlPlugin |
+| markwon-image-glide | 图片（Glide） | GlideImagesPlugin |
+| markwon-image | 图片（自带加载器） | ImagesPlugin |
+| markwon-simple-ext | 自定义分隔符 | SimpleExtPlugin |
+| markwon-syntax-highlight | 代码高亮 | SyntaxHighlightPlugin |
+| markwon-linkify | 裸链接识别 | LinkifyPlugin |
+
+## 四、任务列表（TaskListPlugin）
+
+- [x] 引入 markwon-core
+- [x] 引入全部扩展插件
+- [ ] 真机截图验证
+
+## 五、HTML 标签（HtmlPlugin）
+
+<u>下划线</u>、<b>加粗</b>、<em>强调</em>、<sup>上标</sup>、<sub>下标</sub>、<strike>删除线</strike>。
+
+## 六、数学公式（JLatexMathPlugin）
+
+行内公式直接嵌在句子里，例如欧拉恒等式 $e^{i\pi} + 1 = 0$ 就是这样。
+
+块级公式单独成段：
+
+$$
+\int_{-\infty}^{\infty} e^{-x^2} dx = \sqrt{\pi}
+$$
+
+## 七、链接（LinkifyPlugin）
+
+裸链接会被自动识别成可点击：https://www.baidu.com
+
+行内链接写法：[Markwon 官方文档](https://noties.io/Markwon)
+
+## 八、图片（GlideImagesPlugin / ImagesPlugin 二选一）
+
+![百度](https:\/\/www.baidu.com\/img\/bd_logo.png)

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Markwon 案例</string>
+    <string name="markdown_load_failed">Markdown 资源读取失败</string>
+    <string name="button_image_case">图片案例</string>
+    <string name="button_all_plugins">全插件案例</string>
+</resources>

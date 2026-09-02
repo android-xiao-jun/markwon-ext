@@ -1,0 +1,71 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    compileSdkVersion config['compile-sdk']
+    buildToolsVersion config['build-tools']
+
+    defaultConfig {
+        applicationId 'io.noties.markwon.sample'
+        minSdkVersion config['min-sdk']
+        targetSdkVersion config['target-sdk']
+        versionCode 1
+        versionName '1.0'
+
+        // 引入 jlatexmath / glide / appcompat 后方法数超过 65536，且 minSdk < 21，必须开 multidex
+        multiDexEnabled true
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+
+    lintOptions {
+        abortOnError false
+    }
+}
+
+dependencies {
+    deps.with {
+        implementation it['x-appcompat']
+        implementation it['x-core']
+        implementation it['glide']
+
+        // minSdk < 21 的 multidex 支持
+        implementation 'androidx.multidex:multidex:2.0.1'
+
+        // markwon-image 的 SVG / GIF 解码器（ImagesPlugin 会在 classpath 存在时自动启用）
+        // 注意 android-gif-drawable 固定用 1.2.15，与该库为兼容 API 16 选用的版本保持一致
+        implementation it['android-svg']
+        implementation it['android-gif']
+
+        // markwon-syntax-highlight 需要 Prism4j，语法定义由 SampleGrammarLocator 手写提供
+        implementation it['prism4j']
+    }
+
+    // ---------- markwon 全部模块（recycler / editor 不是 MarkwonPlugin，见 README） ----------
+    implementation project(':markwon-core')
+    implementation project(':markwon-editor')
+    implementation project(':markwon-ext-latex')
+    implementation project(':markwon-ext-strikethrough')
+    implementation project(':markwon-ext-tables')
+    implementation project(':markwon-ext-tasklist')
+    implementation project(':markwon-html')
+    implementation project(':markwon-image')
+    implementation project(':markwon-image-glide')
+    implementation project(':markwon-inline-parser')
+    implementation project(':markwon-linkify')
+    implementation project(':markwon-recycler')
+    implementation project(':markwon-recycler-table')
+    implementation project(':markwon-simple-ext')
+    implementation project(':markwon-syntax-highlight')
+}
