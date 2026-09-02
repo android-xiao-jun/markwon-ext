@@ -21,4 +21,8 @@ dependencies {
     deps.with {
         api it['commonmark-table']
     }
+
+    deps.with {
+        implementation it['x-annotations']
+    }
 }

@@ -19,6 +19,7 @@ dependencies {
     api project(':markwon-core')
 
     deps.with {
+        implementation it['x-annotations']
         api it['commonmark-strikethrough']
     }
 }

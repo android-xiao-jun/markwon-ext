@@ -17,6 +17,6 @@ android {
 
 dependencies {
     api project(':markwon-core')
-    api deps['x-annotations']
+    implementation deps['x-annotations']
     api deps['commonmark']
 }

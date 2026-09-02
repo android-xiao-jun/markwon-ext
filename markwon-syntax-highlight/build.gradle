@@ -21,4 +21,8 @@ dependencies {
     deps.with {
         api it['prism4j']
     }
+
+    deps.with {
+        implementation it['x-annotations']
+    }
 }

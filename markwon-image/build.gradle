@@ -23,4 +23,8 @@ dependencies {
         compileOnly it['android-svg']
         compileOnly it['okhttp']
     }
+
+    deps.with {
+        implementation it['x-annotations']
+    }
 }

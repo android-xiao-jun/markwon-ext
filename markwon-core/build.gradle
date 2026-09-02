@@ -17,7 +17,7 @@ android {
 
 dependencies {
     deps.with {
-        api it['x-annotations']
+        implementation it['x-annotations']
         api it['commonmark']
 
         // @since 4.1.0 to allow PrecomputedTextSetterCompat

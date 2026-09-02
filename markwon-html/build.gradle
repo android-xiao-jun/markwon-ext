@@ -26,4 +26,8 @@ dependencies {
         compileOnly it['commonmark-strikethrough']
 
     }
+
+    deps.with {
+        implementation it['x-annotations']
+    }
 }
