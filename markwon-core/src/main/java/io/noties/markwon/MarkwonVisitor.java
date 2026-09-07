@@ -58,6 +58,8 @@ public interface MarkwonVisitor extends Visitor {
 
         @NonNull
         MarkwonVisitor build(@NonNull MarkwonConfiguration configuration, @NonNull RenderProps renderProps);
+
+        MarkwonVisitor build(@NonNull MarkwonConfiguration configuration, @NonNull RenderProps renderProps, @NonNull SpannableBuilder builder);
     }
 
     @NonNull

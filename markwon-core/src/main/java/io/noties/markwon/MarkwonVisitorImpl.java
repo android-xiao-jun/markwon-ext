@@ -316,6 +316,18 @@ class MarkwonVisitorImpl implements MarkwonVisitor {
         @NonNull
         @Override
         public MarkwonVisitor build(@NonNull MarkwonConfiguration configuration, @NonNull RenderProps renderProps) {
+            return build(configuration, renderProps, new SpannableBuilder());
+        }
+
+        /**
+         * @since 4.6.2 build a visitor with a pre-populated {@link SpannableBuilder}. Used by
+         * {@code appendMarkdown} to seed the rendering context with already settled content so that
+         * plugins whose rendering is <em>builder-context sensitive</em> (notably
+         * {@code HtmlPlugin}) keep emitting byte-identical output to a full-document render.
+         */
+        @NonNull
+        @Override
+        public MarkwonVisitor build(@NonNull MarkwonConfiguration configuration, @NonNull RenderProps renderProps, @NonNull SpannableBuilder builder) {
             // @since 4.3.0
             BlockHandler blockHandler = this.blockHandler;
             if (blockHandler == null) {
@@ -325,7 +337,7 @@ class MarkwonVisitorImpl implements MarkwonVisitor {
             return new MarkwonVisitorImpl(
                     configuration,
                     renderProps,
-                    new SpannableBuilder(),
+                    builder,
                     Collections.unmodifiableMap(nodes),
                     blockHandler);
         }

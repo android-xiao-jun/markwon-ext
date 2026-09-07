@@ -21,6 +21,15 @@ public class AsyncDrawable extends Drawable {
     // @since 4.5.0
     private final Drawable placeholder;
 
+    /**
+     * 构造时快照 {@link AsyncDrawableLoader#isDeferLoading()}。见
+     * {@link AsyncDrawableLoader#setDeferLoading(boolean)}：处于 tail（未稳定区域）的
+     * drawable 永远只显示占位图，不发起加载请求。
+     *
+     * @since 4.6.3
+     */
+    private final boolean deferred;
+
     private Drawable result;
     private Callback callback;
 
@@ -47,6 +56,10 @@ public class AsyncDrawable extends Drawable {
         this.loader = loader;
         this.imageSizeResolver = imageSizeResolver;
         this.imageSize = imageSize;
+
+        // @since 4.6.3 快照「当前渲染是否处于未稳定的 tail」——load() 是在 attach 时才调用的，
+        //  那时已经无法区分它来自 settled 还是 tail，只能在构造（渲染）时记录下来。
+        this.deferred = loader.isDeferLoading();
 
         final Drawable placeholder = this.placeholder = loader.placeholder(this);
         if (placeholder != null) {
@@ -110,6 +123,17 @@ public class AsyncDrawable extends Drawable {
         return result != null;
     }
 
+    /**
+     * @return {@code true} if this drawable belongs to the unstable tail of an
+     * {@code appendMarkdown} render and therefore must keep displaying its placeholder
+     * instead of requesting the image.
+     * @see AsyncDrawableLoader#setDeferLoading(boolean)
+     * @since 4.6.3
+     */
+    public boolean isDeferred() {
+        return deferred;
+    }
+
     public boolean isAttached() {
         return getCallback() != null;
     }
@@ -148,7 +172,9 @@ public class AsyncDrawable extends Drawable {
                 }
             }
 
-            if (shouldLoad) {
+            // @since 4.6.3 tail 区域的 drawable 不发起加载：它下一帧就会被丢弃重建，
+            //  请求既浪费又会让行高在「占位高度」与「真实高度」之间抖动
+            if (shouldLoad && !deferred) {
                 loader.load(this);
             }
         } else {

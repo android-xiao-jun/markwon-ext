@@ -155,7 +155,9 @@ public abstract class AsyncDrawableScheduler {
                 // invalidation moved to upper level (so invalidation can be deferred,
                 // and multiple calls combined)
                 invalidator.invalidate();
-                previousBounds = new Rect(rect);
+                // @since 4.6.3 就地更新而不是 new Rect(rect)：流式渲染每个 chunk 都会
+                // 为 tail 区域的每张图重建 callback 并走这里，避免每次分配一个 Rect
+                previousBounds.set(rect);
             } else {
 
                 view.postInvalidate();
@@ -190,7 +192,14 @@ public abstract class AsyncDrawableScheduler {
 
         @Override
         public void run() {
+            // 图片加载完成后 AsyncDrawable 的 bounds 变了，而 ReplacementSpan 的高度是在
+            // layout 阶段由 AsyncDrawableSpan#getSize 决定的 —— 必须让 TextView 重新走一次
+            // 完整 setText 才会重新测量行高，重新绘制整段文本。
             textView.setText(textView.getText());
+            // 兜底：部分 TextView 实现对「与当前 mText 相同 / 相等的 CharSequence」会跳过
+            // 重新 layout，这里显式请求一次布局，避免图片被上一版行高裁切
+            textView.requestLayout();
+            textView.invalidate();
         }
     }
 }

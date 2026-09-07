@@ -146,4 +146,47 @@ public interface MarkwonPlugin {
      * @param textView TextView to which markdown was applied
      */
     void afterSetText(@NonNull TextView textView);
+
+    /**
+     * Called at the start of every {@link Markwon#appendMarkdown(MarkwonAppendState, String)}
+     * invocation, BEFORE the new chunk is settled. Plugins with stateful context that would
+     * otherwise leak across chunk boundaries should use this hook to reset it.
+     *
+     * <p>Example: {@code HtmlPlugin} restores its parser's {@code previousIsBlock} and
+     * {@code isInsidePreTag} flags to the values they had at the end of the SETTLED content
+     * (recorded by the previous call's {@link #afterSettle}), not the stale values left by
+     * the previous chunk's tail renderInto. Without this reset the new chunk's first block
+     * can pick up a phantom {@code \n} from {@code ensureNewLineIfPreviousWasBlock} that a
+     * full-document render would not produce.
+     *
+     * <p>Called even on the first call of a session (when {@code state.settledLength() == 0}),
+     * in which case the plugin should clear all stateful context.
+     *
+     * @param state current streaming state (source/settledEnd/settled have all been updated
+     *              with the new chunk's source and any prior rebuild/settle work)
+     * @see Markwon#appendMarkdown(MarkwonAppendState, String)
+     * @since 4.6.3
+     */
+    void beforeAppendChunk(@NonNull MarkwonAppendState state);
+
+    /**
+     * Called immediately after each settle pass within an {@code appendMarkdown} call,
+     * BEFORE the tail is re-rendered. Plugins should snapshot any stateful context that
+     * needs to survive across chunk boundaries — typically the same context that
+     * {@link #beforeAppendChunk} restores.
+     *
+     * <p>Example: {@code HtmlPlugin} records its parser's {@code previousIsBlock} flag at
+     * this point so the next chunk's {@link #beforeAppendChunk} can put the parser back
+     * into the state corresponding to the end of the SETTLED content. Capturing AFTER the
+     * settle (and BEFORE the tail) is what makes this work: the tail renderInto runs with
+     * the same context-continuous parser, but its end state must NOT be used as the
+     * starting state of the next chunk's settle.
+     *
+     * <p>No-op if no settle happened in this call (tail-only re-render).
+     *
+     * @param state current streaming state
+     * @see Markwon#appendMarkdown(MarkwonAppendState, String)
+     * @since 4.6.3
+     */
+    void afterSettle(@NonNull MarkwonAppendState state);
 }

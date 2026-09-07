@@ -65,7 +65,7 @@ public class SpannableBuilder implements Appendable, CharSequence {
 
     public SpannableBuilder(@NonNull CharSequence cs) {
         this.builder = new StringBuilder(cs);
-        copySpans(0, cs);
+        copySpansFrom(cs, 0);
     }
 
     /**
@@ -91,7 +91,7 @@ public class SpannableBuilder implements Appendable, CharSequence {
     @Override
     public SpannableBuilder append(@NonNull CharSequence cs) {
 
-        copySpans(length(), cs);
+        copySpansFrom(cs, length());
 
         builder.append(cs);
 
@@ -332,6 +332,33 @@ public class SpannableBuilder implements Appendable, CharSequence {
     public void clear() {
         builder.setLength(0);
         spans.clear();
+    }
+
+    /**
+     * Copies spans of {@code cs} into this builder, shifting them by {@code index}.
+     *
+     * <p>Handles the {@link SpannableBuilder} case explicitly: it keeps its spans in an internal
+     * deque and deliberately does <em>not</em> implement {@link Spanned} (spans are applied in
+     * reversed order only when {@link #spannableStringBuilder()} is called). Falling through to
+     * {@link #copySpans(int, CharSequence)} would therefore drop <em>every</em> span silently —
+     * which is exactly what used to strip the settled region of all its spans on each
+     * {@code appendMarkdown} chunk (code block background, syntax highlight, links, emphasis,
+     * tables, ... disappeared as soon as a block left the unstable tail).
+     *
+     * @since 4.6.3
+     */
+    private void copySpansFrom(@Nullable CharSequence cs, final int index) {
+        if (cs instanceof SpannableBuilder) {
+            // spans is a deque whose head is the _last_ pushed span; push iterates the source
+            // from tail to head so the resulting order matches the source builder exactly
+            final Iterator<Span> iterator = ((SpannableBuilder) cs).spans.descendingIterator();
+            while (iterator.hasNext()) {
+                final Span span = iterator.next();
+                spans.push(new Span(span.what, index + span.start, index + span.end, span.flags));
+            }
+        } else {
+            copySpans(index, cs);
+        }
     }
 
     private void copySpans(final int index, @Nullable CharSequence cs) {

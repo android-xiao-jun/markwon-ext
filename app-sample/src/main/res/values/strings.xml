@@ -4,4 +4,5 @@
     <string name="markdown_load_failed">Markdown 资源读取失败</string>
     <string name="button_image_case">图片案例</string>
     <string name="button_all_plugins">全插件案例</string>
+    <string name="button_sse_case">流式SSE案例</string>
 </resources>

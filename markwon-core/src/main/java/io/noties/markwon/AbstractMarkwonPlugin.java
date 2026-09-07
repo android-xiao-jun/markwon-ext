@@ -74,4 +74,14 @@ public abstract class AbstractMarkwonPlugin implements MarkwonPlugin {
     public void afterSetText(@NonNull TextView textView) {
 
     }
+
+    @Override
+    public void beforeAppendChunk(@NonNull MarkwonAppendState state) {
+
+    }
+
+    @Override
+    public void afterSettle(@NonNull MarkwonAppendState state) {
+
+    }
 }

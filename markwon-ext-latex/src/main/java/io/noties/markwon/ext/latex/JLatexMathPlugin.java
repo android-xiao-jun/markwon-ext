@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.text.Spanned;
+import android.util.LruCache;
 import android.util.Log;
 import android.widget.TextView;
 
@@ -16,11 +17,12 @@ import androidx.annotation.VisibleForTesting;
 
 import org.commonmark.parser.Parser;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
 
 import io.noties.markwon.AbstractMarkwonPlugin;
 import io.noties.markwon.MarkwonConfiguration;
@@ -369,9 +371,20 @@ public class JLatexMathPlugin extends AbstractMarkwonPlugin {
     // @since 4.0.0
     static class JLatextAsyncDrawableLoader extends AsyncDrawableLoader {
 
+        /**
+         * 已渲染结果缓存（key = block标记 + latex 源文）。SSE / 增量渲染时每个 chunk
+         * 都会为未稳定区域重建 {@link JLatextAsyncDrawable}，若没有这层缓存，同一公式
+         * 会反复提交后台解析（jlatexmath 解析开销大）并从空白重新显示，造成闪烁。
+         * 命中缓存时在主线程同步应用结果。
+         */
+        private static final int RESULT_CACHE_SIZE = 3 * 8;
+
         private final Config config;
         private final Handler handler = new Handler(Looper.getMainLooper());
-        private final Map<AsyncDrawable, Future<?>> cache = new HashMap<>(3);
+        private final LruCache<String, JLatexMathDrawable> resultCache = new LruCache<>(RESULT_CACHE_SIZE);
+        // 进行中的渲染任务：同一公式的其他 drawable（流式重渲染产生）登记为等待者，渲染完成后一起应用
+        private final Map<String, List<AsyncDrawable>> pending = new HashMap<>(2);
+        private final Map<AsyncDrawable, String> pendingKeys = new HashMap<>(2);
 
         JLatextAsyncDrawableLoader(@NonNull Config config) {
             this.config = config;
@@ -382,59 +395,79 @@ public class JLatexMathPlugin extends AbstractMarkwonPlugin {
 
             // this method must be called from main-thread only (thus synchronization can be skipped)
 
-            // check for currently running tasks associated with provided drawable
-            final Future<?> future = cache.get(drawable);
+            final String latex = drawable.getDestination();
+            final String key = (drawable instanceof JLatextAsyncDrawable
+                    && ((JLatextAsyncDrawable) drawable).isBlock()
+                    ? "b|"
+                    : "i|") + latex;
 
-            // if it's present -> proceed with new execution
+            // 1. 已渲染过 -> 同步应用，立即可见，不再提交后台解析
+            final JLatexMathDrawable cached = resultCache.get(key);
+            if (cached != null) {
+                drawable.setResult(cached);
+                return;
+            }
+
+            // 2. 同一公式正在渲染 -> 登记为等待者，渲染完成后一起应用（等待块一起渲染）
+            final List<AsyncDrawable> waiters = pending.get(key);
+            if (waiters != null) {
+                waiters.add(drawable);
+                pendingKeys.put(drawable, key);
+                return;
+            }
+
+            // 3. 首次渲染，提交后台任务
+            final List<AsyncDrawable> list = new ArrayList<>(1);
+            list.add(drawable);
+            pending.put(key, list);
+            pendingKeys.put(drawable, key);
+
             // as asyncDrawable is immutable, it won't have destination changed (so there is no need
             // to cancel any started tasks)
-            if (future == null) {
-
-                cache.put(drawable, config.executorService.submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        // @since 4.0.1 wrap in try-catch block and add error logging
-                        try {
-                            execute();
-                        } catch (Throwable t) {
-                            // @since 4.3.0 add error handling
-                            final ErrorHandler errorHandler = config.errorHandler;
-                            if (errorHandler == null) {
-                                // as before
-                                Log.e(
-                                        "JLatexMathPlugin",
-                                        "Error displaying latex: `" + drawable.getDestination() + "`",
-                                        t);
-                            } else {
-                                // just call `getDestination` without casts and checks
-                                final Drawable errorDrawable = errorHandler.handleError(
-                                        drawable.getDestination(),
-                                        t
-                                );
-                                if (errorDrawable != null) {
-                                    DrawableUtils.applyIntrinsicBoundsIfEmpty(errorDrawable);
-                                    setResult(drawable, errorDrawable);
-                                }
+            config.executorService.submit(new Runnable() {
+                @Override
+                public void run() {
+                    // @since 4.0.1 wrap in try-catch block and add error logging
+                    try {
+                        execute();
+                    } catch (Throwable t) {
+                        // @since 4.3.0 add error handling
+                        final ErrorHandler errorHandler = config.errorHandler;
+                        if (errorHandler == null) {
+                            // as before
+                            Log.e(
+                                    "JLatexMathPlugin",
+                                    "Error displaying latex: `" + drawable.getDestination() + "`",
+                                    t);
+                        } else {
+                            // just call `getDestination` without casts and checks
+                            final Drawable errorDrawable = errorHandler.handleError(
+                                    drawable.getDestination(),
+                                    t
+                            );
+                            if (errorDrawable != null) {
+                                DrawableUtils.applyIntrinsicBoundsIfEmpty(errorDrawable);
+                                postResult(key, errorDrawable);
                             }
                         }
                     }
+                }
 
-                    private void execute() {
+                private void execute() {
 
-                        final JLatexMathDrawable jLatexMathDrawable;
+                    final JLatexMathDrawable jLatexMathDrawable;
 
-                        final JLatextAsyncDrawable jLatextAsyncDrawable = (JLatextAsyncDrawable) drawable;
+                    final JLatextAsyncDrawable jLatextAsyncDrawable = (JLatextAsyncDrawable) drawable;
 
-                        if (jLatextAsyncDrawable.isBlock()) {
-                            jLatexMathDrawable = createBlockDrawable(jLatextAsyncDrawable);
-                        } else {
-                            jLatexMathDrawable = createInlineDrawable(jLatextAsyncDrawable);
-                        }
-
-                        setResult(drawable, jLatexMathDrawable);
+                    if (jLatextAsyncDrawable.isBlock()) {
+                        jLatexMathDrawable = createBlockDrawable(jLatextAsyncDrawable);
+                    } else {
+                        jLatexMathDrawable = createInlineDrawable(jLatextAsyncDrawable);
                     }
-                }));
-            }
+
+                    postResult(key, jLatexMathDrawable);
+                }
+            });
         }
 
         @Override
@@ -442,19 +475,52 @@ public class JLatexMathPlugin extends AbstractMarkwonPlugin {
 
             // this method also must be called from main thread only
 
-            final Future<?> future = cache.remove(drawable);
-            if (future != null) {
-                future.cancel(true);
+            final String key = pendingKeys.remove(drawable);
+            if (key == null) {
+                return;
             }
-
-            // remove all callbacks (via runnable) and messages posted for this drawable
-            handler.removeCallbacksAndMessages(drawable);
+            final List<AsyncDrawable> waiters = pending.get(key);
+            if (waiters != null) {
+                waiters.remove(drawable);
+                if (waiters.isEmpty()) {
+                    // 等待者全部消失，后台任务继续跑完（结果仍写入缓存，之后可同步复用）
+                    pending.remove(key);
+                }
+            }
         }
 
         @Nullable
         @Override
         public Drawable placeholder(@NonNull AsyncDrawable drawable) {
             return null;
+        }
+
+        /**
+         * 将渲染结果写入缓存，并投递到主线程应用到所有等待者。
+         * LruCache 线程安全，可从后台线程写入。
+         */
+        private void postResult(@NonNull final String key, @NonNull final Drawable result) {
+            if (result instanceof JLatexMathDrawable) {
+                resultCache.put(key, (JLatexMathDrawable) result);
+            }
+
+            handler.postAtTime(new Runnable() {
+                @Override
+                public void run() {
+                    final List<AsyncDrawable> waiters = pending.remove(key);
+                    if (waiters == null) {
+                        return;
+                    }
+                    for (AsyncDrawable waiter : waiters) {
+                        // 已被 cancel 的等待者（pendingKeys 中已移除）直接跳过
+                        if (pendingKeys.remove(waiter) == null
+                                || !waiter.isAttached()) {
+                            continue;
+                        }
+                        waiter.setResult(result);
+                    }
+                }
+            }, key, SystemClock.uptimeMillis());
         }
 
         // @since 4.3.0
@@ -516,23 +582,6 @@ public class JLatexMathPlugin extends AbstractMarkwonPlugin {
             }
 
             return builder.build();
-        }
-
-        // @since 4.3.0
-        private void setResult(@NonNull final AsyncDrawable drawable, @NonNull final Drawable result) {
-            // we must post to handler, but also have a way to identify the drawable
-            // for which we are posting (in case of cancellation)
-            handler.postAtTime(new Runnable() {
-                @Override
-                public void run() {
-                    // remove entry from cache (it will be present if task is not cancelled)
-                    if (cache.remove(drawable) != null
-                            && drawable.isAttached()) {
-                        drawable.setResult(result);
-                    }
-
-                }
-            }, drawable, SystemClock.uptimeMillis());
         }
     }
 

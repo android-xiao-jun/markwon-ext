@@ -8,6 +8,7 @@ import org.commonmark.node.HtmlInline;
 import org.commonmark.node.Node;
 
 import io.noties.markwon.AbstractMarkwonPlugin;
+import io.noties.markwon.MarkwonAppendState;
 import io.noties.markwon.MarkwonConfiguration;
 import io.noties.markwon.MarkwonVisitor;
 import io.noties.markwon.html.tag.BlockquoteHandler;
@@ -59,6 +60,13 @@ public class HtmlPlugin extends AbstractMarkwonPlugin {
 
     // @since 4.4.0
     private HtmlEmptyTagReplacement emptyTagReplacement = new HtmlEmptyTagReplacement();
+
+    // @since 4.6.3 — tracks the HtmlParser's {@code previousIsBlock} flag at the END of the
+    // SETTLED content (the just-cached prefix), so the next chunk's {@link #beforeAppendChunk}
+    // can put the parser back into the corresponding state before settling the new chunk's
+    // delta. Without this, stale state from the previous chunk's TAIL renderInto would leak
+    // into the next settle pass and break byte-equality with a full-document render.
+    private boolean lastSettledPreviousIsBlock;
 
     @SuppressWarnings("WeakerAccess")
     HtmlPlugin() {
@@ -176,5 +184,25 @@ public class HtmlPlugin extends AbstractMarkwonPlugin {
         if (html != null) {
             htmlParser.processFragment(visitor.builder(), html);
         }
+    }
+
+    @Override
+    public void beforeAppendChunk(@NonNull MarkwonAppendState state) {
+        // Put the HtmlParser back into the state that reflects the END of the SETTLED
+        // content (recorded by the previous chunk's {@link #afterSettle}), not the stale
+        // state left by the previous chunk's tail renderInto. For the very first call of a
+        // session {@code lastSettledPreviousIsBlock} is {@code false}, which is also the
+        // correct state for an empty settled prefix.
+        htmlParser.resetForNextChunk(lastSettledPreviousIsBlock);
+    }
+
+    @Override
+    public void afterSettle(@NonNull MarkwonAppendState state) {
+        // Snapshot the HtmlParser's {@code previousIsBlock} flag at the moment the SETTLED
+        // content finishes — BEFORE the tail renderInto runs, so the captured value
+        // corresponds to the end of the SETTLED prefix and not to whatever the tail happens
+        // to end on. The next chunk's {@link #beforeAppendChunk} uses this to restore the
+        // parser to the correct state before settling the new chunk's delta.
+        lastSettledPreviousIsBlock = htmlParser.previousIsBlock();
     }
 }

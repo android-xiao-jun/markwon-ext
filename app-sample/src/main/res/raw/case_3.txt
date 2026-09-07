@@ -1,0 +1,119 @@
+# Markdown 语法文档
+
+### 修改图片的显示大小
+
+* 有两种方式修改，一种是指定图片的宽高，另外一种是指定图片的缩放比例，具体的格式如下：
+
+```xml
+<img src="https://www.baidu.com/img/bd_logo.png" width="300px" height="200px" alt="图片名称" />
+
+<img src="https://www.baidu.com/img/bd_logo.png" width="50%" height="50%" alt="图片名称" />
+```
+
+* 具体的效果如下：
+
+<img src="https://www.baidu.com/img/bd_logo.png" width="300px" height="200px" alt="图片名称" />
+
+<img src="https://www.baidu.com/img/bd_logo.png" width="20%" height="20%" alt="图片名称" />
+
+### 修改文字的显示重心
+
+* 需要用 html 标签来实现，具体的格式如下：
+
+```
+<p align="left">文字左对齐</p>
+
+<p align="center">文字居中</p>
+
+<p align="right">文字右对齐</p>
+```
+
+* 具体的效果如下：
+
+<p align="left">文字左对齐</p>
+
+<p align="center">文字居中</p>
+
+<p align="right">文字右对齐</p>
+
+### 使用的展开收缩功能
+
+* 需要用 html 标签来实现，具体的格式如下：
+
+```
+<details>
+<summary>更新日志（收缩状态）</summary>
+
+* 惊不惊喜？
+
+* 意不意外？
+
+* 开不开心？
+
+* 懵不懵逼？
+
+</details>
+
+
+<details open>
+<summary>更新日志（展开状态）</summary>
+
+* 惊不惊喜？
+
+* 意不意外？
+
+* 开不开心？
+
+* 懵不懵逼？
+
+</details>
+```
+
+* 具体的效果如下：
+
+<details>
+<summary>更新日志（收缩状态）</summary>
+
+* 惊不惊喜？
+
+* 意不意外？
+
+* 开不开心？
+
+* 懵不懵逼？
+
+</details>
+
+
+<details open>
+<summary>更新日志（展开状态）</summary>
+
+* 惊不惊喜？
+
+* 意不意外？
+
+* 开不开心？
+
+* 懵不懵逼？
+
+</details>
+
+#### 作者的其他开源项目
+
+* 安卓技术中台：[AndroidProject](https://github.com/getActivity/AndroidProject) ![](https://img.shields.io/github/stars/getActivity/AndroidProject.svg) ![](https://img.shields.io/github/forks/getActivity/AndroidProject.svg)
+
+* 安卓技术中台 Kt 版：[AndroidProject-Kotlin](https://github.com/getActivity/AndroidProject-Kotlin) ![](https://img.shields.io/github/stars/getActivity/AndroidProject-Kotlin.svg) ![](https://img.shields.io/github/forks/getActivity/AndroidProject-Kotlin.svg)
+
+* 权限框架：[XXPermissions](https://github.com/getActivity/XXPermissions) ![](https://img.shields.io/github/stars/getActivity/XXPermissions.svg) ![](https://img.shields.io/github/forks/getActivity/XXPermissions.svg)
+
+#### 微信公众号：Android轮子哥
+
+![](https://raw.githubusercontent.com/getActivity/Donate/master/picture/official_ccount.png)
+
+#### Android 技术 Q 群：10047167
+
+#### 如果您觉得我的开源库帮你节省了大量的开发时间，请扫描下方的二维码随意打赏，要是能打赏个 10.24 :monkey_face:就太:thumbsup:了。您的支持将鼓励我继续创作:octocat:
+
+![](https://raw.githubusercontent.com/getActivity/Donate/master/picture/pay_ali.png) ![](https://raw.githubusercontent.com/getActivity/Donate/master/picture/pay_wechat.png)
+
+#### [点击查看捐赠列表](https://github.com/getActivity/Donate)

@@ -1,6 +1,7 @@
 package io.noties.markwon;
 
 import android.content.Context;
+import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.widget.TextView;
 
@@ -100,6 +101,78 @@ public abstract class Markwon {
      */
     @NonNull
     public abstract Spanned toMarkdown(@NonNull String input);
+
+    /**
+     * Parses and renders markdown <em>incrementally</em>: appends {@code newString} to a document
+     * that was previously rendered into {@code old} and returns a new {@link Spanned}.
+     * <p>
+     * Designed for streams (SSE / LLM tokens / typing emulation) where markdown arrives in small
+     * chunks: instead of parsing the whole (constantly growing) document on each chunk, only the
+     * unsettled <em>tail</em> of a document is re-parsed, everything that cannot change anymore is
+     * rendered once and re-used. Resulting content is identical to
+     * {@code toMarkdown(fullAccumulatedSource)}.
+     * <p>
+     * Usage:
+     * <pre>
+     *     Spanned spanned = new SpannableStringBuilder();
+     *     for (String chunk : chunks) {
+     *         spanned = markwon.appendMarkdown(spanned, chunk);
+     *         markwon.setParsedMarkdown(textView, spanned);
+     *     }
+     *     // which is the same as (state is attached to a TextView text as well):
+     *     for (String chunk : chunks) {
+     *         markwon.appendMarkdown(textView, chunk);
+     *     }
+     * </pre>
+     * <p>
+     * {@code old} must be a {@link Spanned} previously returned by this method (or by
+     * {@link #appendMarkdown(MarkwonAppendState, String)}), otherwise markdown syntax of
+     * {@code old} is unknown and it is treated as an already rendered document: new content is
+     * appended to it as a new block (which is still acceptable, but does not give the streaming
+     * performance benefit for the first chunk).
+     *
+     * @param old       previously rendered markdown (see notes above)
+     * @param newString markdown chunk to append
+     * @return new {@link Spanned} with appended content (supplied {@code old} is not modified)
+     * @see #appendMarkdown(TextView, String)
+     * @see #appendMarkdown(MarkwonAppendState, String)
+     * @see MarkwonAppendState
+     * @since 4.6.2
+     */
+    @NonNull
+    public abstract Spanned appendMarkdown(@NonNull Spanned old, @NonNull String newString);
+
+    /**
+     * Same as {@link #appendMarkdown(Spanned, String)}, but with an explicitly supplied state.
+     * Useful when a rendered {@link Spanned} is not retained (for example it is reduced,
+     * filtered or re-created by a client code).
+     *
+     * @param state     state of an incremental session
+     * @param newString markdown chunk to append
+     * @since 4.6.2
+     */
+    @NonNull
+    public abstract Spanned appendMarkdown(@NonNull MarkwonAppendState state, @NonNull String newString);
+
+    /**
+     * Convenience method that appends {@code markdown} to a content that is currently displayed
+     * by a {@code textView} (incremental rendering, see {@link #appendMarkdown(Spanned, String)}).
+     * <p>
+     * Note: if a {@link TextSetter} is used, text is applied asynchronously, so this method must
+     * be called only after a previous chunk was applied (or {@link #appendMarkdown(Spanned, String)}
+     * with an explicitly retained {@link Spanned} must be used).
+     *
+     * @param textView TextView to append markdown to
+     * @param markdown markdown chunk to append
+     * @since 4.6.2
+     */
+    public void appendMarkdown(@NonNull TextView textView, @NonNull String markdown) {
+        final CharSequence text = textView.getText();
+        final Spanned spanned = text instanceof Spanned
+                ? (Spanned) text
+                : new SpannableStringBuilder(text == null ? "" : text);
+        setParsedMarkdown(textView, appendMarkdown(spanned, markdown));
+    }
 
     public abstract void setMarkdown(@NonNull TextView textView, @NonNull String markdown);
 

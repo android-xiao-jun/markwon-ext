@@ -90,7 +90,7 @@ public class MarkwonHtmlParserImpl extends MarkwonHtmlParser {
                 "address", "article", "aside",
                 "blockquote",
                 "canvas",
-                "dd", "div", "dl", "dt",
+                "dd", "details", "dialog", "div", "dl", "dt",
                 "fieldset", "figcaption", "figure", "footer", "form",
                 "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr",
                 "li",
@@ -227,8 +227,60 @@ public class MarkwonHtmlParserImpl extends MarkwonHtmlParser {
 
     @Override
     public void reset() {
+        // Per-render reset — clears tag-tracking state that is meaningless across render
+        // boundaries (the in-flight inline-tag list and the open block stack).
+        //
+        // We DELIBERATELY do NOT clear {@code previousIsBlock} or {@code isInsidePreTag}
+        // here: those represent context that should remain continuous across the multiple
+        // {@code renderInto} calls performed inside a single {@code appendMarkdown} (the
+        // settle pass and the tail pass both render fragments of the same HtmlPlugin
+        // invocation, and they share the parser state). Within a single render the parser
+        // processes HtmlBlocks one after another sharing this instance, so within-render
+        // continuity is also preserved automatically.
+        //
+        // Between STREAMING CHUNKS (i.e. between successive {@code appendMarkdown} calls),
+        // the caller (MarkwonImpl) is responsible for invoking {@link #resetForNextChunk()}
+        // BEFORE settling the new chunk. That call clears the context flags as well, since
+        // the chunk's settle pass always starts on a fresh block boundary (the last
+        // character of the previous settled content is always {@code '\n'}).
+        //
+        // Background: an earlier version of this method was a full reset and was the
+        // direct cause of the second-half context-continuity bug in appendMarkdown streaming
+        // (the {@code <p align="left">文字左对齐</p>\n\n<p align="center">\n文字居中</p>}
+        // sequence: the first {@code </p>} sets previousIsBlock=true, then the second
+        // {@code <p>}'s text passes through ensureNewLineIfPreviousWasBlock which adds the
+        // extra {@code \n} after the open tag. A full reset wiped that flag between settle
+        // and tail, dropping the {@code \n}).
         inlineTags.clear();
         currentBlock = HtmlTagImpl.BlockImpl.root();
+    }
+
+    /**
+     * Reset the context flags that survive across {@code renderInto} boundaries within a
+     * single {@code appendMarkdown} call. Called by {@code MarkwonImpl} at the START of an
+     * {@code appendMarkdown} call (i.e. between streaming chunks), so the new chunk's settle
+     * pass starts with a parser that has no stale {@code previousIsBlock} or
+     * {@code isInsidePreTag} from the previous chunk's tail.
+     *
+     * <p>Safe to call multiple times. Has no effect on the per-render state cleared by
+     * {@link #reset()}.
+     *
+     * @since 4.6.3
+     */
+    public void resetForNextChunk() {
+        previousIsBlock = false;
+        isInsidePreTag = false;
+    }
+
+    @Override
+    public void resetForNextChunk(boolean previousIsBlock) {
+        this.previousIsBlock = previousIsBlock;
+        this.isInsidePreTag = false;
+    }
+
+    @Override
+    public boolean previousIsBlock() {
+        return previousIsBlock;
     }
 
 
