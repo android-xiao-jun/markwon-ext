@@ -41,8 +41,13 @@ public class SyntaxHighlightPlugin extends AbstractMarkwonPlugin {
     @Override
     public void configureTheme(@NonNull MarkwonTheme.Builder builder) {
         builder
-                .codeTextColor(theme.textColor())
-                .codeBackgroundColor(theme.background());
+                // @since 4.6.3 — block-level fields only (upstream behavior).
+                // Previously the inline-code fields (codeTextColor /
+                // codeBackgroundColor) were set, which painted inline code with
+                // the syntax theme (dark background + light text); inline code
+                // now keeps its default styling.
+                .codeBlockTextColor(theme.textColor())
+                .codeBlockBackgroundColor(theme.background());
     }
 
     @Override

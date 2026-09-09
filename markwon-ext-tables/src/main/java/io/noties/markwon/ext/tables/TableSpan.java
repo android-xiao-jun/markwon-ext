@@ -2,6 +2,8 @@ package io.noties.markwon.ext.tables;
 
 import android.text.TextPaint;
 
+import androidx.annotation.NonNull;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -33,6 +35,29 @@ public class TableSpan {
         }
     }
 
+    /**
+     * Position of the specified row inside this table. Rows are registered in
+     * document order, so {@code 0} is the first row.
+     *
+     * @since 4.6.3
+     */
+    int indexOfRow(@NonNull TableRowSpan row) {
+        // identity based lookup (TableRowSpan does not override equals)
+        for (int i = 0; i < rows.size(); i++) {
+            if (rows.get(i) == row) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /**
+     * @since 4.6.3
+     */
+    int rowCount() {
+        return rows.size();
+    }
+
     void invalidateLayouts() {
         layoutsDirty = true;
     }
@@ -47,6 +72,14 @@ public class TableSpan {
     void ensureLayouts(int availableWidth, TextPaint textPaint, TableTheme theme) {
         if (!layoutsDirty && layoutWidth == availableWidth) {
             return;
+        }
+
+        // @since 4.6.3 — publish stable row positions before anything else.
+        // By the time layouts are first requested all rows are registered, so
+        // this is the reliable place to freeze first/last row info used for
+        // corner rounding (a draw-time lookup proved unreliable on device).
+        for (int i = 0; i < rows.size(); i++) {
+            rows.get(i).rowPosition(i, rows.size());
         }
 
         layoutWidth = availableWidth;

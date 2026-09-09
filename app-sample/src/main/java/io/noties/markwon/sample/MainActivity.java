@@ -31,11 +31,14 @@ import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Objects;
 
+import io.noties.markwon.AbstractMarkwonPlugin;
 import io.noties.markwon.Markwon;
 import io.noties.markwon.MarkwonAppendState;
+import io.noties.markwon.core.MarkwonTheme;
 import io.noties.markwon.ext.latex.JLatexMathPlugin;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
 import io.noties.markwon.ext.tables.TablePlugin;
+import io.noties.markwon.ext.tables.TableTheme;
 import io.noties.markwon.ext.tasklist.TaskListPlugin;
 import io.noties.markwon.html.HtmlPlugin;
 import io.noties.markwon.image.AsyncDrawable;
@@ -301,8 +304,19 @@ public class MainActivity extends AppCompatActivity {
                 .usePlugin(StrikethroughPlugin.create())
                 // - [ ] / - [x] 任务列表
                 .usePlugin(TaskListPlugin.create(this))
-                // GFM 表格
-                .usePlugin(TablePlugin.create(this))
+                // GFM 表格（tableCornerRadius 给表格四个外角设置圆角，单位 px）
+                .usePlugin(TablePlugin.create(TableTheme.buildWithDefaults(this)
+                        .tableCornerRadius((int) dp2px(8))
+                        .build()))
+                // 行内代码 + 代码块背景圆角（codeBackgroundRadius / codeBlockBackgroundRadius）
+                .usePlugin(new AbstractMarkwonPlugin() {
+                    @Override
+                    public void configureTheme(@NonNull MarkwonTheme.Builder builder) {
+                        builder
+                                .codeBackgroundRadius((int) dp2px(4))
+                                .codeBlockBackgroundRadius((int) dp2px(6));
+                    }
+                })
                 // 自定义分隔符：==高亮== 与 ++下划线++
                 .usePlugin(SimpleExtPlugin.create(plugin -> {
                     plugin.addExtension(2, '=', (configuration, props) ->
@@ -381,6 +395,11 @@ public class MainActivity extends AppCompatActivity {
     private float sp2px(float sp) {
         return TypedValue.applyDimension(
                 TypedValue.COMPLEX_UNIT_SP, sp, getResources().getDisplayMetrics());
+    }
+
+    private float dp2px(float dp) {
+        return TypedValue.applyDimension(
+                TypedValue.COMPLEX_UNIT_DIP, dp, getResources().getDisplayMetrics());
     }
 
     /**

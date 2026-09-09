@@ -66,6 +66,13 @@ public class TableTheme {
     // When false the table is constrained to the viewport width and touch-scrolling is disabled.
     protected final boolean tableScrollEnabled;
 
+    // @since 4.6.3
+    // Radius (in pixels) applied to the four outer corners of a table.
+    // The radius is only applied to the first (top-left/top-right) and the
+    // last (bottom-left/bottom-right) row, so inner rows keep square corners.
+    // A non-positive value means no rounding (default, backward compatible).
+    protected final int tableCornerRadius;
+
     protected TableTheme(@NonNull Builder builder) {
         this.tableCellPadding = builder.tableCellPadding;
         this.tableBorderColor = builder.tableBorderColor;
@@ -75,6 +82,7 @@ public class TableTheme {
         this.tableHeaderRowBackgroundColor = builder.tableHeaderRowBackgroundColor;
         this.tableMaxColumnWidth = builder.tableMaxColumnWidth;
         this.tableScrollEnabled = builder.tableScrollEnabled;
+        this.tableCornerRadius = builder.tableCornerRadius;
 
         if(builder.tableOddRowBackgroundColorAlpha == -1) {
             this.tableOddRowBackgroundColorAlpha = TABLE_ODD_ROW_DEF_ALPHA;
@@ -96,7 +104,9 @@ public class TableTheme {
                 .tableEvenRowBackgroundColor(tableEvenRowBackgroundColor)
                 .tableHeaderRowBackgroundColor(tableHeaderRowBackgroundColor)
                 .tableMaxColumnWidth(tableMaxColumnWidth)
-                .tableScrollEnabled(tableScrollEnabled);
+                .tableScrollEnabled(tableScrollEnabled)
+                .tableOddRowBackgroundColorAlpha(tableOddRowBackgroundColorAlpha)
+                .tableCornerRadius(tableCornerRadius);
     }
 
     public int tableCellPadding() {
@@ -117,6 +127,17 @@ public class TableTheme {
      */
     public boolean isTableScrollEnabled() {
         return tableScrollEnabled;
+    }
+
+    /**
+     * Returns the radius (in pixels) used for the four outer corners of a table.
+     * A non-positive value means the table is drawn with square corners.
+     *
+     * @since 4.6.3
+     */
+    @Px
+    public int tableCornerRadius() {
+        return tableCornerRadius;
     }
 
     public int tableBorderWidth(@NonNull Paint paint) {
@@ -182,6 +203,7 @@ public class TableTheme {
         private int tableHeaderRowBackgroundColor; // @since 1.1.1
         private int tableMaxColumnWidth;
         private boolean tableScrollEnabled = false;
+        private int tableCornerRadius; // @since 4.6.3
 
         @NonNull
         public Builder tableCellPadding(@Px int tableCellPadding) {
@@ -238,6 +260,21 @@ public class TableTheme {
         @NonNull
         public Builder tableScrollEnabled(boolean enabled) {
             this.tableScrollEnabled = enabled;
+            return this;
+        }
+
+        /**
+         * Sets the radius (in pixels) for the four outer corners of a table. Only the
+         * first row (top corners) and the last row (bottom corners) are rounded, inner
+         * rows and inner grid lines are not affected.
+         * <p>
+         * Pass a non-positive value to draw square corners (default).
+         *
+         * @since 4.6.3
+         */
+        @NonNull
+        public Builder tableCornerRadius(@Px int tableCornerRadius) {
+            this.tableCornerRadius = tableCornerRadius;
             return this;
         }
 

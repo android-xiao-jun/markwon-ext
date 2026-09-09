@@ -1,6 +1,7 @@
 package io.noties.markwon.core.spans;
 
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
 
@@ -15,6 +16,7 @@ abstract class ObjectsPool {
     private static final Rect RECT = new Rect();
     private static final RectF RECT_F = new RectF();
     private static final Paint PAINT = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private static final Path PATH = new Path();
 
     static Rect rect() {
         return RECT;
@@ -26,6 +28,10 @@ abstract class ObjectsPool {
 
     static Paint paint() {
         return PAINT;
+    }
+
+    static Path path() {
+        return PATH;
     }
 
     private ObjectsPool() {

@@ -3,7 +3,9 @@ package io.noties.markwon.ext.tables;
 import android.annotation.SuppressLint;
 import android.graphics.Canvas;
 import android.graphics.Paint;
+import android.graphics.Path;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.text.Layout;
 import android.text.Spannable;
@@ -70,6 +72,8 @@ public class TableRowSpan extends ReplacementSpan {
     private final boolean odd;
 
     private final Rect rect = new Rect();
+    private final RectF rectF = new RectF();
+    private final Path path = new Path();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private int width; // TextView width (display window)
@@ -78,6 +82,11 @@ public class TableRowSpan extends ReplacementSpan {
     private int height;
     private Invalidator invalidator;
     private final TableSpan tableSpan;
+
+    // @since 4.6.3 — frozen position of this row inside the table, published
+    // by TableSpan#ensureLayouts once all rows are registered. -1 until then.
+    private int rowIndex = -1;
+    private int rowCount;
 
     public TableRowSpan(
             @NonNull TableTheme theme,
@@ -168,6 +177,24 @@ public class TableRowSpan extends ReplacementSpan {
 
         final int padding = theme.tableCellPadding();
         final int size = layouts.size();
+        final int rowHeight = bottom - top;
+
+        // @since 4.6.3 — rounded outer corners, drawn directly (no clipping):
+        // the first row rounds its top corners, the last row the bottom ones.
+        // Clipping was abandoned on purpose — a clip edge cuts the border
+        // lines at the corners and is never anti-aliased. Instead:
+        //   background  → drawn as a rounded path (anti-aliased)
+        //   top/bottom lines and edge columns → indented by the radius
+        //   the corner arc itself → drawn as a stroked arc segment
+        int radius = theme.tableCornerRadius();
+        float corner = 0F;
+        if (radius > 0 && rowHeight > 0 && tableTotalWidth > 0) {
+            corner = Math.min(radius, Math.min(tableTotalWidth, rowHeight) / 2F);
+        }
+        final boolean first = corner > 0F && rowIndex == 0;
+        final boolean last = corner > 0F && rowCount > 0 && rowIndex == rowCount - 1;
+        // geometric last row (independent of rounding) — see the bottom line below
+        final boolean lastRow = rowCount > 0 && rowIndex == rowCount - 1;
 
         canvas.save();
         // Clip to the actual visible area and apply scroll translation
@@ -180,21 +207,69 @@ public class TableRowSpan extends ReplacementSpan {
         else theme.applyTableEvenRowStyle(paint);
 
         if (paint.getColor() != 0) {
-            rect.set(0, 0, tableTotalWidth, bottom - top);
-            canvas.drawRect(rect, paint);
+            rect.set(0, 0, tableTotalWidth, rowHeight);
+            if (first || last) {
+                rectF.set(rect);
+                roundedRect(path, rectF, corner, first, first, last, last);
+                paint.setAntiAlias(true);
+                canvas.drawPath(path, paint);
+            } else {
+                canvas.drawRect(rect, paint);
+            }
         }
 
         // 2. Borders
         paint.set(p);
         theme.applyTableBorderStyle(paint);
         final int borderWidth = theme.tableBorderWidth(paint);
+        paint.setAntiAlias(true);
 
-        canvas.drawRect(0, 0, tableTotalWidth, borderWidth, paint);
-        canvas.drawRect(0, bottom - top - borderWidth, tableTotalWidth, bottom - top, paint);
+        // horizontal lines: indented by the radius on rounded sides so they
+        // meet the corner arcs instead of sticking out of the rounded shape.
+        // The bottom line is drawn by the LAST row only — the row below
+        // provides its own top line, drawing both doubles the thickness of
+        // every inner separator.
+        final float topLineStart = first ? corner : 0F;
+        final float topLineEnd = first ? tableTotalWidth - corner : tableTotalWidth;
+        canvas.drawRect(topLineStart, 0F, topLineEnd, borderWidth, paint);
+
+        if (lastRow) {
+            final float bottomLineStart = last ? corner : 0F;
+            final float bottomLineEnd = last ? tableTotalWidth - corner : tableTotalWidth;
+            canvas.drawRect(bottomLineStart, rowHeight - borderWidth, bottomLineEnd, rowHeight, paint);
+        }
+
+        // corner arcs: stroked segments whose centerline radius is
+        // (corner - borderWidth/2), so the stroke sits exactly on the inner
+        // side of the rounded background and joins the straight lines
+        if (first || last) {
+            final float bw2 = borderWidth / 2F;
+            final float r = corner - bw2;
+            final Paint.Style previousStyle = paint.getStyle();
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(borderWidth);
+            if (first) {
+                rectF.set(bw2, bw2, r * 2F + bw2, r * 2F + bw2);
+                canvas.drawArc(rectF, 180F, 90F, false, paint);
+                rectF.set(tableTotalWidth - r * 2F - bw2, bw2, tableTotalWidth - bw2, r * 2F + bw2);
+                canvas.drawArc(rectF, 270F, 90F, false, paint);
+            }
+            if (last) {
+                rectF.set(tableTotalWidth - r * 2F - bw2, rowHeight - r * 2F - bw2, tableTotalWidth - bw2, rowHeight - bw2);
+                canvas.drawArc(rectF, 0F, 90F, false, paint);
+                rectF.set(bw2, rowHeight - r * 2F - bw2, r * 2F + bw2, rowHeight - bw2);
+                canvas.drawArc(rectF, 90F, 90F, false, paint);
+            }
+            paint.setStyle(previousStyle);
+        }
 
         // 3. Cells and vertical borders
         int currentX = 0;
         int maxHeight = 0;
+
+        // edge columns are shortened on rounded sides to meet the arcs
+        final float edgeTop = first ? corner : 0F;
+        final float edgeBottom = last ? rowHeight - corner : rowHeight;
 
         for (int i = 0; i < size; i++) {
             Layout layout = layouts.get(i);
@@ -202,12 +277,16 @@ public class TableRowSpan extends ReplacementSpan {
             try {
                 int colW = columnWidths[i];
 
-                canvas.drawRect(currentX, 0, currentX + borderWidth, bottom - top, paint);
+                if (i == 0) {
+                    canvas.drawRect(currentX, edgeTop, currentX + borderWidth, edgeBottom, paint);
+                } else {
+                    canvas.drawRect(currentX, 0, currentX + borderWidth, rowHeight, paint);
+                }
                 if (i == size - 1) {
-                    canvas.drawRect(currentX + colW - borderWidth, 0, currentX + colW, bottom - top, paint);
+                    canvas.drawRect(currentX + colW - borderWidth, edgeTop, currentX + colW, edgeBottom, paint);
                 }
 
-                final int contentAreaHeight = (bottom - top) - padding * 2;
+                final int contentAreaHeight = rowHeight - padding * 2;
                 final int heightDiff = Math.max(0, (contentAreaHeight - layout.getHeight()) / 2);
 
                 canvas.translate(currentX + padding, padding + heightDiff);
@@ -243,6 +322,64 @@ public class TableRowSpan extends ReplacementSpan {
 //                invalidator.invalidate();
 //            }
         }
+    }
+
+    /**
+     * @since 4.6.3 — called by TableSpan#ensureLayouts with the stable position
+     * of this row (index 0 = first row) and the total row count.
+     */
+    void rowPosition(int index, int count) {
+        this.rowIndex = index;
+        this.rowCount = count;
+    }
+
+    /**
+     * Builds a rectangle with independently rounded corners (a compatible
+     * replacement for {@code Path#addRoundRect(float[], ...)} which requires API 21).
+     */
+    private static void roundedRect(
+            @NonNull Path path,
+            @NonNull RectF bounds,
+            float radius,
+            boolean topLeft,
+            boolean topRight,
+            boolean bottomRight,
+            boolean bottomLeft) {
+
+        final float r = Math.min(radius, Math.min(bounds.width(), bounds.height()) / 2F);
+
+        path.reset();
+        path.moveTo(bounds.left + (topLeft ? r : 0F), bounds.top);
+
+        if (topRight) {
+            path.lineTo(bounds.right - r, bounds.top);
+            path.arcTo(bounds.right - r * 2, bounds.top, bounds.right, bounds.top + r * 2, -90F, 90F, false);
+        } else {
+            path.lineTo(bounds.right, bounds.top);
+        }
+
+        if (bottomRight) {
+            path.lineTo(bounds.right, bounds.bottom - r);
+            path.arcTo(bounds.right - r * 2, bounds.bottom - r * 2, bounds.right, bounds.bottom, 0F, 90F, false);
+        } else {
+            path.lineTo(bounds.right, bounds.bottom);
+        }
+
+        if (bottomLeft) {
+            path.lineTo(bounds.left + r, bounds.bottom);
+            path.arcTo(bounds.left, bounds.bottom - r * 2, bounds.left + r * 2, bounds.bottom, 90F, 90F, false);
+        } else {
+            path.lineTo(bounds.left, bounds.bottom);
+        }
+
+        if (topLeft) {
+            path.lineTo(bounds.left, bounds.top + r);
+            path.arcTo(bounds.left, bounds.top, bounds.left + r * 2, bounds.top + r * 2, 180F, 90F, false);
+        } else {
+            path.lineTo(bounds.left, bounds.top);
+        }
+
+        path.close();
     }
 
     private void drawScrollbar(Canvas canvas, int rowHeight, int scrollX, int drawableWidth) {

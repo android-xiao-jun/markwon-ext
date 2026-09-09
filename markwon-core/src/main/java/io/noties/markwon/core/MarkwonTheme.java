@@ -166,6 +166,14 @@ public class MarkwonTheme {
 
     protected final int codeBlockTextSize;
 
+    // @since 4.6.3 — corner radius (in pixels) of the inline-code background.
+    // Non-positive value means no rounding (default, backward compatible).
+    protected final int codeBackgroundRadius;
+
+    // @since 4.6.3 — corner radius (in pixels) of the fenced-code-block background.
+    // Non-positive value means no rounding (default, backward compatible).
+    protected final int codeBlockBackgroundRadius;
+
     // by default paint.getStrokeWidth
     protected final int headingBreakHeight;
 
@@ -205,6 +213,8 @@ public class MarkwonTheme {
         this.codeBlockTypeface = builder.codeBlockTypeface;
         this.codeTextSize = builder.codeTextSize;
         this.codeBlockTextSize = builder.codeBlockTextSize;
+        this.codeBackgroundRadius = builder.codeBackgroundRadius;
+        this.codeBlockBackgroundRadius = builder.codeBlockBackgroundRadius;
         this.headingBreakHeight = builder.headingBreakHeight;
         this.headingBreakColor = builder.headingBreakColor;
         this.headingTypeface = builder.headingTypeface;
@@ -407,6 +417,28 @@ public class MarkwonTheme {
                 : ColorUtils.applyAlpha(paint.getColor(), CODE_DEF_BACKGROUND_COLOR_ALPHA);
     }
 
+    /**
+     * Returns the corner radius (in pixels) used for the inline-code background.
+     * A non-positive value means no rounding.
+     *
+     * @since 4.6.3
+     */
+    @Px
+    public int getCodeBackgroundRadius() {
+        return codeBackgroundRadius;
+    }
+
+    /**
+     * Returns the corner radius (in pixels) used for the fenced-code-block background.
+     * A non-positive value means no rounding.
+     *
+     * @since 4.6.3
+     */
+    @Px
+    public int getCodeBlockBackgroundRadius() {
+        return codeBlockBackgroundRadius;
+    }
+
     public void applyHeadingTextStyle(@NonNull Paint paint, @IntRange(from = 1, to = 6) int level) {
         if (headingTypeface == null) {
             paint.setFakeBoldText(true);
@@ -478,6 +510,8 @@ public class MarkwonTheme {
         private Typeface codeBlockTypeface; // @since 3.0.0
         private int codeTextSize;
         private int codeBlockTextSize; // @since 3.0.0
+        private int codeBackgroundRadius; // @since 4.6.3
+        private int codeBlockBackgroundRadius; // @since 4.6.3
         private int headingBreakHeight = -1;
         private int headingBreakColor;
         private Typeface headingTypeface;
@@ -504,6 +538,10 @@ public class MarkwonTheme {
             this.codeBlockMargin = theme.codeBlockMargin;
             this.codeTypeface = theme.codeTypeface;
             this.codeTextSize = theme.codeTextSize;
+            this.codeBlockTypeface = theme.codeBlockTypeface;
+            this.codeBlockTextSize = theme.codeBlockTextSize;
+            this.codeBackgroundRadius = theme.codeBackgroundRadius;
+            this.codeBlockBackgroundRadius = theme.codeBlockBackgroundRadius;
             this.headingBreakHeight = theme.headingBreakHeight;
             this.headingBreakColor = theme.headingBreakColor;
             this.headingTypeface = theme.headingTypeface;
@@ -625,6 +663,30 @@ public class MarkwonTheme {
         @NonNull
         public Builder codeBlockTextSize(@Px int codeTextSize) {
             this.codeBlockTextSize = codeTextSize;
+            return this;
+        }
+
+        /**
+         * Sets the corner radius (in pixels) for the inline-code background.
+         * Pass a non-positive value to draw square corners (default).
+         *
+         * @since 4.6.3
+         */
+        @NonNull
+        public Builder codeBackgroundRadius(@Px int codeBackgroundRadius) {
+            this.codeBackgroundRadius = codeBackgroundRadius;
+            return this;
+        }
+
+        /**
+         * Sets the corner radius (in pixels) for the fenced-code-block background.
+         * Pass a non-positive value to draw square corners (default).
+         *
+         * @since 4.6.3
+         */
+        @NonNull
+        public Builder codeBlockBackgroundRadius(@Px int codeBlockBackgroundRadius) {
+            this.codeBlockBackgroundRadius = codeBlockBackgroundRadius;
             return this;
         }
 
