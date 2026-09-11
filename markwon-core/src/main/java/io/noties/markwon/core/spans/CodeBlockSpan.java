@@ -211,12 +211,21 @@ public class CodeBlockSpan extends MetricAffectingSpan implements LeadingMarginS
         // The canvas is the full device surface here, so a right edge taken from
         // it lands outside the visible TextView area when the view has margins —
         // the rounded top/bottom-right corners would be clipped away entirely.
+        //
+        // In Layout coordinates the text area is exactly `[0, width]` and, for a
+        // left-to-right paragraph, the left edge of the block is where `x` is. The two are
+        // *not* interchangeable: `x` is the position **after** the leading margins of the
+        // line it sits on — not only ours, but every one accumulated on that line, an
+        // enclosing list item's included. So `x + width` overshoots the text area by however
+        // much those margins add up to, which pushes the block — and the copy button pinned
+        // to its right end — past the view edge, cutting the label in half. The far edge is
+        // simply the far edge of the text area, i.e. `width` itself.
         final int width = layout != null ? layout.getWidth() : c.getWidth();
         if (dir > 0) {
             left = x;
-            right = x + width;
+            right = width;
         } else {
-            left = x - width;
+            left = 0;
             right = x;
         }
 

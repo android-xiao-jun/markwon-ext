@@ -43,6 +43,12 @@ public class CodeBlockLineSpan extends ReplacementSpan {
     public static final int TYPE_CODE = 1;
     public static final int TYPE_FOOTER = 2;
 
+    /**
+     * "The offset could not be resolved" marker for
+     * {@link #setViewport(float, float)} — a real offset is never negative.
+     */
+    private static final float UNSET_OFFSET = -1F;
+
     private final MarkwonTheme theme;
     private final CodeBlockScrollState state;
     private final int type;
@@ -179,12 +185,53 @@ public class CodeBlockLineSpan extends ReplacementSpan {
      * Injects the width of the text area (Layout coordinates, {@code 0} is the left edge of
      * the text area). Called by {@code CodeBlockScrollPlugin} before every {@code setText}
      * and whenever the TextView is re-laid out.
+     *
+     * @see #setViewport(float, float)
      */
     public void setViewport(float textAreaWidth) {
-        state.beginMeasure(textAreaWidth
-                - theme.getCodeBlockMargin()
+        setViewport(textAreaWidth, UNSET_OFFSET);
+    }
+
+    /**
+     * Same as {@link #setViewport(float)} but with the position the block actually starts at,
+     * relative to the left edge of the text area.
+     *
+     * <p><b>Why it cannot be assumed.</b> Everything the block draws is shifted right by every
+     * leading margin accumulated on its lines — and that is not only
+     * {@link MarkwonTheme#getCodeBlockMargin()}: an enclosing list item contributes one of its
+     * own ({@code OrderedListItemSpan} / {@code BulletListItemSpan} are
+     * {@code LeadingMarginSpan}s too). Reserving the text area minus our own margin alone would
+     * therefore hand the block more room than it has: its lines reach past the right edge of
+     * the text area, get clipped by the view, and — because the phantom room also inflates
+     * {@link CodeBlockScrollState#getViewportWidth()} — {@code canScroll()} stays false, so the
+     * cut-off part can never be scrolled into view either.
+     *
+     * @param leftOffset the offset resolved by {@code CodeBlockScrollHelper} from the
+     *                   {@code Layout} (sum of the leading margins of the line), or a negative
+     *                   value when it could not be resolved — the block then falls back to its
+     *                   own {@code codeBlockMargin}, which is what the single-argument overload
+     *                   has always done.
+     * @return whether the viewport actually changed, so the caller can decide if the block has
+     * to be laid out again (a caller that re-injects on every frame — the {@code TextView}
+     * never re-measures on its own — otherwise pays for a layout pass per frame).
+     * @since 4.6.3
+     */
+    public boolean setViewport(float textAreaWidth, float leftOffset) {
+        // NB: only trust a resolved offset that actually fits inside the text area — the width
+        // can be pushed in before the view has laid the new text out, in which case the line
+        // resolved from the (stale) Layout is meaningless.
+        final float offset = leftOffset >= 0F && leftOffset < textAreaWidth
+                ? leftOffset
+                : theme.getCodeBlockMargin();
+
+        final float viewport = Math.max(0F, textAreaWidth
+                - offset
                 - theme.getCodeBlockPadding() * 2F);
+        final boolean changed = Math.abs(viewport - state.getViewportWidth()) >= 0.5F;
+
+        state.beginMeasure(viewport);
         lineWidth = -1F;
+        return changed;
     }
 
     @Override
@@ -246,6 +293,14 @@ public class CodeBlockLineSpan extends ReplacementSpan {
         if (lineWidth < 0F) {
             lineWidth = SpannedTextRenderer.INSTANCE.render(null, text, start, end, 0F, 0F, paint);
         }
+        // NB: report it here too, not only from getSize. `canScroll()` — which drives both the
+        // scrollbar and the ability to drag the block — is derived from the accumulated content
+        // width, and a draw pass is the one thing that is guaranteed to happen. Without this a
+        // re-layout that does not re-measure the spans leaves the content width at 0: the block
+        // silently becomes "not scrollable" while its lines are still clipped to the viewport,
+        // i.e. the cut-off part can never be brought into view. Reporting is a max(), so doing
+        // it on every frame is harmless.
+        state.reportLineWidth(lineWidth);
 
         final float padding = theme.getCodeBlockPadding();
         final float viewport = state.getViewportWidth();

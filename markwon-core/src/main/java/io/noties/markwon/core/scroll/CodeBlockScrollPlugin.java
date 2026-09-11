@@ -166,6 +166,15 @@ public class CodeBlockScrollPlugin extends AbstractMarkwonPlugin {
 
     @Override
     public void afterSetText(@NonNull TextView textView) {
+        // By now the view holds the new text *and* a Layout describing it, so the viewport can
+        // be re-resolved against a layout that is actually up to date — the pass in
+        // beforeSetText could only read the previous one. Only meaningful when the view is
+        // already measured; the first setText is covered by the layout-change pass instead.
+        final CharSequence text = textView.getText();
+        if (text instanceof Spanned) {
+            CodeBlockScrollHelper.injectViewport(textView, (Spanned) text);
+        }
+
         CodeBlockScrollHelper.attach(textView, copyListener);
     }
 }

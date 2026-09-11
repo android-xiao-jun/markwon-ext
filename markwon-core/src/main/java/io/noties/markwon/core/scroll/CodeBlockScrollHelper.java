@@ -2,6 +2,7 @@ package io.noties.markwon.core.scroll;
 
 import android.text.Layout;
 import android.text.Spanned;
+import android.text.style.LeadingMarginSpan;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -48,6 +49,12 @@ final class CodeBlockScrollHelper implements View.OnTouchListener, View.OnLayout
     private static final long COPY_FEEDBACK_DURATION_MS = 1200L;
 
     /**
+     * "The offset could not be resolved" marker for {@link #applyViewport}; a real offset is
+     * never negative.
+     */
+    private static final float UNSET_OFFSET = -1F;
+
+    /**
      * Injects the width of the text area into every code block span of {@code markdown}.
      */
     static void injectViewport(@NonNull TextView textView, @NonNull Spanned markdown) {
@@ -55,14 +62,78 @@ final class CodeBlockScrollHelper implements View.OnTouchListener, View.OnLayout
         if (width <= 0F) {
             return;
         }
+        applyViewport(textView, markdown, width);
+    }
+
+    /**
+     * Hands every block its room: the width of the text area, plus the position the block
+     * actually starts at.
+     *
+     * <p>The offset is not a detail. A block nested in a list item is shifted right by that
+     * item's leading margin as well as by its own, and only the {@code Layout} knows by how
+     * much. Handing out the text area without it reserves more room than the block has: its
+     * lines are painted past the right edge of the text area (clipped away by the view), while
+     * the inflated viewport keeps {@code canScroll()} at {@code false} — so the cut-off part
+     * cannot be scrolled into view either. Resolved here, where both the {@code Spanned} and
+     * the {@code Layout} are at hand.
+     */
+    private static boolean applyViewport(
+            @NonNull TextView textView,
+            @NonNull Spanned markdown,
+            float textAreaWidth) {
+
         final CodeBlockLineSpan[] spans =
                 markdown.getSpans(0, markdown.length(), CodeBlockLineSpan.class);
         if (spans == null) {
-            return;
+            return false;
         }
+
+        final Layout layout = textView.getLayout();
+        boolean changed = false;
         for (CodeBlockLineSpan span : spans) {
-            span.setViewport(width);
+            // NB: `|=` and not `||` — every span must be handed the new viewport, not just
+            // the first one that happens to change.
+            changed |= span.setViewport(textAreaWidth, leftOffset(markdown, layout, span));
         }
+        return changed;
+    }
+
+    /**
+     * Offset of the block relative to the left edge of the text area: the sum of the leading
+     * margins of the line it starts on — exactly the shift the framework applies before handing
+     * the line to be drawn. Negative when it cannot be resolved (no layout yet, or one that
+     * still describes the previous text), which leaves the span to fall back to its own margin.
+     */
+    private static float leftOffset(
+            @NonNull Spanned spanned,
+            @Nullable Layout layout,
+            @NonNull Object span) {
+
+        if (layout == null || layout.getLineCount() <= 0) {
+            return UNSET_OFFSET;
+        }
+
+        final int start = spanned.getSpanStart(span);
+        if (start < 0 || start >= spanned.length()) {
+            return UNSET_OFFSET;
+        }
+
+        final int line = Math.min(
+                Math.max(layout.getLineForOffset(start), 0),
+                layout.getLineCount() - 1);
+
+        float offset = 0F;
+        final LeadingMarginSpan[] margins = spanned.getSpans(
+                layout.getLineStart(line),
+                layout.getLineEnd(line),
+                LeadingMarginSpan.class);
+        if (margins != null) {
+            for (LeadingMarginSpan margin : margins) {
+                offset += margin.getLeadingMargin(true);
+            }
+        }
+
+        return offset > 0F ? offset : UNSET_OFFSET;
     }
 
     /**
@@ -94,6 +165,12 @@ final class CodeBlockScrollHelper implements View.OnTouchListener, View.OnLayout
      * refreshed every time, because it belongs to the plugin instance, not to the view.
      */
     static void attach(@NonNull TextView textView, @Nullable CodeBlockCopyListener copyListener) {
+        // NB: deferred, deliberately. `setText` throws the current Layout away and builds the
+        // new one later in the same frame, so at this very moment `getLayout()` is either null
+        // or still describes the previous text — neither can say where a block starts. The next
+        // message runs after that layout pass, which is when the offset becomes resolvable.
+        textView.post(new ResolveViewport(textView));
+
         final Object tag = textView.getTag(R.id.markwon_code_block_scroll_helper);
         if (tag instanceof CodeBlockScrollHelper) {
             ((CodeBlockScrollHelper) tag).copyListener = copyListener;
@@ -257,15 +334,9 @@ final class CodeBlockScrollHelper implements View.OnTouchListener, View.OnLayout
             return;
         }
 
-        final Spanned spanned = (Spanned) text;
-        final CodeBlockLineSpan[] spans =
-                spanned.getSpans(0, spanned.length(), CodeBlockLineSpan.class);
-        if (spans == null) {
-            return;
-        }
-        for (CodeBlockLineSpan span : spans) {
-            span.setViewport(width);
-        }
+        // NB: the Layout is the fresh one at this point — the view has just been laid out —
+        // which is exactly why the offset can be resolved here with confidence.
+        applyViewport(textView, (Spanned) text, width);
 
         // the spans clamp their width to the viewport, so the Layout has to be rebuilt
         textView.requestLayout();
@@ -399,5 +470,39 @@ final class CodeBlockScrollHelper implements View.OnTouchListener, View.OnLayout
         return Math.min(
                 Math.max(layout.getLineForOffset(offset), 0),
                 layout.getLineCount() - 1);
+    }
+
+    /**
+     * Resolves the viewport once, right after the view has laid out the text that was just set
+     * — see {@link #attach} for why it cannot be done in place. Re-injects both the width and
+     * the offset of every block, and asks for another layout pass <em>only</em> when the room
+     * actually changed: the block constrains the width of its own lines, so a corrected
+     * viewport has to reach the Layout to take effect, but an unchanged one must not cost a
+     * layout pass on every {@code setText}.
+     */
+    private static final class ResolveViewport implements Runnable {
+
+        private final TextView textView;
+
+        ResolveViewport(@NonNull TextView textView) {
+            this.textView = textView;
+        }
+
+        @Override
+        public void run() {
+            final CharSequence text = textView.getText();
+            if (!(text instanceof Spanned)) {
+                return;
+            }
+
+            final float width = textAreaWidth(textView);
+            if (width <= 0F) {
+                return;
+            }
+
+            if (applyViewport(textView, (Spanned) text, width)) {
+                textView.requestLayout();
+            }
+        }
     }
 }
