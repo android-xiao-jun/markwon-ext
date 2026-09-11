@@ -5,10 +5,10 @@
 >
 > 1. **新增流式增量渲染** `Markwon#appendMarkdown` —— 面向 SSE / LLM token 流，逐块追加时只重解析「未稳定的尾部」，
 >    输出与整段 `toMarkdown` **字节级一致**；
-> 2. **把装饰能力收敛成可配置项** —— 代码块横向滚动、语言栏、复制按钮、行内/代码块圆角、表格圆角等，统一走
->    `MarkwonTheme`（以及 `CodeBlockCopyTheme` / `TableTheme`），且**一律 opt-in**：不配置就没有这个属性；
+> 2. **把装饰能力收敛成可配置项** —— 代码块横向滚动、语言栏、复制按钮、行内/代码块圆角、表格圆角与表格滚动条等，
+>    统一走 `MarkwonTheme`（以及 `CodeBlockCopyTheme` / `TableTheme`），且**一律 opt-in**：不配置就没有这个属性；
 > 3. **提供一份框架默认值的显式快照** `DefaultTheme` —— Markwon 的默认样式
-> 4. 修复`Table`展示异常，以及增加`Table`可以横向滚动
+> 4. 修复`Table`展示异常，以及增加`Table`可以横向滚动（整块区域拖拽 + 与代码块同样式的底部滚动条，见 [3.7](#37-表格横向滚动拖拽--底部滚动条)）
 
 ---
 
@@ -352,6 +352,47 @@ Markwon 的默认样式不在一处，而是靠 `0` / `-1` / `null` 这类哨兵
 3. **正文字色不归 Markwon 管**：正文颜色由承载它的 `TextView`（`textColor`）决定，`MarkwonTheme` 里没有 `textColor`。
    链接色默认取 `TextView` 的 `textColorLink`。
 
+### 3.7 表格横向滚动（拖拽 + 底部滚动条）
+
+```java
+Markwon.builder(this)
+        .usePlugin(TablePlugin.create(TableTheme.buildWithDefaults(this)
+                .tableScrollEnabled(true)          // 开关：默认 false（宽度约束在视口内、列等宽）
+                .tableScrollbarHeight(dp(this, 14))  // 滚动条 opt-in，见下
+                .tableScrollbarThumbColor(0xFFCACACA)
+                .build()))
+        .build();
+```
+
+打开 `tableScrollEnabled(true)` 之后：
+
+- **列宽按内容算**：先给每列一个 `视口/4` 的底宽，再按各列最宽单元格撑开，上限是 `tableMaxColumnWidth`
+  （默认 200dp）；总宽 ≥ 视口时把列拉满到视口，超出视口就可以横向滚动。
+- **整块区域拖拽都能滚**：判定用的是表格占据的**行区间**（`getLineTop` / `getLineBottom`），
+  而不是手指底下那个字符 —— 于是单元格、边框、滚动条、以及短行右侧的空白都能起手。
+  手势的判定与代码块一致：横向位移超过 `touchSlop` 且大于纵向位移才算拖动，
+  纵向手势原样交回外层 `ScrollView`。
+- **不需要宿主再设 `TableAwareMovementMethod`**：拖拽由 `TablePlugin` 自己装的
+  `OnTouchListener` 负责（经过 `GestureRouter` 分发，见「注意事项」），
+  平板/普通 `TextView` 都能用 —— `MovementMethod` 只在 `TextView` 自己消费 `ACTION_DOWN`
+  时才会被调到，而普通 `TextView` 并不消费。
+- **单元格内的链接不受影响**：只有可滚动的表格才会消费 `ACTION_DOWN`；若手势最后只是一次
+  **单击**（没拖动），`DOWN` 会被回放给宿主设的 `MovementMethod`，`ClickableSpan` 照常点到。
+- **底部滚动条**：与代码块底部那条**同一套样式**（同一组常量，见 `DefaultTheme` 第五节「横向滚动条」）——
+  圆头细条，先铺轨道再压滑块，滑块长度按「视口 / 内容」比例、位置取滚动比例。
+  它画在**内容位移之外**，并且**固定在可视区**的底部与左右两侧，不随内容滑动。
+  ⚠️ 与代码块不同，它**不占行高**：代码块能把这条压在自己的页脚行里，表格没有页脚行可给 ——
+  一旦预留，最后一行就会比上面所有行都高。所以表格的滚动条是**覆盖**在卡片底边框内侧的
+  （占用的是单元格本来就留出的底部 padding），每一行的高度完全由内容决定。
+  与代码块同规则，它也是 **opt-in**：`tableScrollbarHeight > 0` **且** 轨道/滑块至少有一个颜色才存在，
+  否则不画（表格照样能拖，只是看不到当前位置）。
+- **卡片外框（可视区四条边）**：表格比视口宽时，内容自己的左右边线会随内容滚出屏幕，
+  于是只在**可视区**的四条边上补一圈「卡片外框」（左/右边线由每一行各画一段，顶线归首行、底线归末行），
+  这样拖动过程中**左右两侧都不会缺边**。不做这一步的话，表格滚到中间时两侧都没有竖线。
+  外框与内容自己的边线在 `scrollX == 0` 时**完全重合**，所以静止时看不出多了一层。
+  ⚠️ 推论：**超宽的表格不会有圆角**（圆角属于内容、会跟着滚，外框固定不动，两者对不上），
+  只有**能塞进视口**的表格才画圆角。
+
 ---
 
 ## 四、注意事项
@@ -368,6 +409,12 @@ Markwon 的默认样式不在一处，而是靠 `0` / `-1` / `null` 这类哨兵
   案例工程为免引入 annotationProcessor 流程，用 `SampleGrammarLocator` 手写了 java / kotlin / groovy / json / xml 五种。
 - **流式下的代码块滚动 / 图片**：tail（未稳定区域）里的图片只放占位图不发起请求，
   块落进 settled 区域（或流结束时的全量渲染）才真正加载。
+- **一个 `TextView` 只有一个 `OnTouchListener`**：代码块拖拽（`CodeBlockScrollPlugin`）与表格拖拽
+  （`TablePlugin`）都要接手势，后装的会静默顶掉先装的。因此两者都注册到
+  `io.noties.markwon.core.scroll.GestureRouter`：它是真正被装上去的那一个，
+  把手势发给**第一个消费 `ACTION_DOWN`** 的注册方（注册顺序 = 优先级），
+  没人消费则照旧走 `TextView` 自己的处理（链接、选中、父容器滚动）。
+  自己写插件要接手势时，用 `GestureRouter.attach(textView).add(key, listener)`，不要直接 `setOnTouchListener`。
 
 ---
 

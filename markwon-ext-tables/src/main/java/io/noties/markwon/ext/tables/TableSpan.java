@@ -221,8 +221,52 @@ public class TableSpan {
             this.scrollX = 0;
             return;
         }
-        int maxScroll = Math.max(0, tableWidth - textViewWidth);
-        this.scrollX = Math.min(Math.max(0, scrollX), maxScroll);
+        this.scrollX = Math.min(Math.max(0, scrollX), getMaxScroll());
+    }
+
+    /**
+     * Largest value {@link #getScrollX()} can take: the part of the content that does not fit
+     * the viewport. {@code 0} when the table fits.
+     *
+     * @since 4.6.3
+     */
+    public int getMaxScroll() {
+        return Math.max(0, tableWidth - textViewWidth);
+    }
+
+    /**
+     * Whether the table has anything to scroll to at all: scrolling must be enabled
+     * ({@link TableTheme#isTableScrollEnabled()}, read on every layout pass) <b>and</b> the
+     * content must be wider than the viewport.
+     *
+     * <p>This is what decides whether a gesture is allowed to take over the table — a table
+     * that fits must not swallow the touch, otherwise the cells' links and the parent
+     * {@code ScrollView} would stop receiving it for nothing.
+     *
+     * @since 4.6.3
+     */
+    public boolean canScroll() {
+        return scrollEnabled && getMaxScroll() > 0;
+    }
+
+    /**
+     * @return {@code true} if the scroll position actually changed
+     * @since 4.6.3
+     */
+    public boolean scrollBy(int dx) {
+        final int before = scrollX;
+        setScrollX(before + dx);
+        return scrollX != before;
+    }
+
+    /**
+     * Scroll position normalized to {@code [0, 1]}, used to place the scrollbar thumb.
+     *
+     * @since 4.6.3
+     */
+    public float getScrollRatio() {
+        final int max = getMaxScroll();
+        return max <= 0 ? 0F : scrollX / (float) max;
     }
 
     public boolean isScrollEnabled() {

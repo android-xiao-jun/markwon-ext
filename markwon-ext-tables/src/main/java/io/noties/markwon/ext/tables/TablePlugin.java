@@ -94,6 +94,11 @@ public class TablePlugin extends AbstractMarkwonPlugin {
     @Override
     public void afterSetText(@NonNull TextView textView) {
         TableRowsScheduler.schedule(textView);
+        // @since 4.6.3 — horizontal scrolling by dragging anywhere over the table. Installed
+        // unconditionally: the listener hands the gesture back untouched unless the table under
+        // the finger can actually scroll (which requires TableTheme#tableScrollEnabled), so a
+        // table that is not scrollable behaves exactly as it did before.
+        TableScrollTouchListener.attach(textView);
     }
 
     private static class TableVisitor {

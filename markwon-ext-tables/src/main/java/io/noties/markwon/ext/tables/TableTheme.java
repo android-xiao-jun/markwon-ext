@@ -73,6 +73,20 @@ public class TableTheme {
     // A non-positive value means no rounding (default, backward compatible).
     protected final int tableCornerRadius;
 
+    // @since 4.6.3
+    // Height reserved at the bottom of the last row for the horizontal scrollbar.
+    // `0` (default) = not configured = no scrollbar at all: nothing is painted and no room
+    // is reserved. Same opt-in rule as the code block's scrollbar.
+    protected final int tableScrollbarHeight;
+
+    // @since 4.6.3
+    // Color of the scrollbar track. `0` (default) = not configured = the track is not painted.
+    protected final int tableScrollbarTrackColor;
+
+    // @since 4.6.3
+    // Color of the scrollbar thumb. `0` (default) = not configured = the thumb is not painted.
+    protected final int tableScrollbarThumbColor;
+
     protected TableTheme(@NonNull Builder builder) {
         this.tableCellPadding = builder.tableCellPadding;
         this.tableBorderColor = builder.tableBorderColor;
@@ -83,6 +97,11 @@ public class TableTheme {
         this.tableMaxColumnWidth = builder.tableMaxColumnWidth;
         this.tableScrollEnabled = builder.tableScrollEnabled;
         this.tableCornerRadius = builder.tableCornerRadius;
+        // NB: no `!= 0 ? … : <hardcoded color>` fallback — `0` means "this property does not
+        // exist" and the corresponding part of the scrollbar is simply not painted.
+        this.tableScrollbarHeight = builder.tableScrollbarHeight;
+        this.tableScrollbarTrackColor = builder.tableScrollbarTrackColor;
+        this.tableScrollbarThumbColor = builder.tableScrollbarThumbColor;
 
         if(builder.tableOddRowBackgroundColorAlpha == -1) {
             this.tableOddRowBackgroundColorAlpha = TABLE_ODD_ROW_DEF_ALPHA;
@@ -106,7 +125,10 @@ public class TableTheme {
                 .tableMaxColumnWidth(tableMaxColumnWidth)
                 .tableScrollEnabled(tableScrollEnabled)
                 .tableOddRowBackgroundColorAlpha(tableOddRowBackgroundColorAlpha)
-                .tableCornerRadius(tableCornerRadius);
+                .tableCornerRadius(tableCornerRadius)
+                .tableScrollbarHeight(tableScrollbarHeight)
+                .tableScrollbarTrackColor(tableScrollbarTrackColor)
+                .tableScrollbarThumbColor(tableScrollbarThumbColor);
     }
 
     public int tableCellPadding() {
@@ -138,6 +160,60 @@ public class TableTheme {
     @Px
     public int tableCornerRadius() {
         return tableCornerRadius;
+    }
+
+    /**
+     * Thickness the horizontal scrollbar is derived from, in pixels — the bar itself is drawn
+     * {@code 0.3 ×} this tall, the same recipe as the code block's.
+     * {@code 0} (default) = <b>not configured</b> = no scrollbar at all.
+     *
+     * <p><b>Nothing is reserved for it.</b> Unlike the code block — whose footer row carries the
+     * bar — a table row cannot give up any height, or the last row would be taller than all the
+     * others. The bar is drawn as an overlay resting on the inside of the card's bottom border.
+     *
+     * @since 4.6.3
+     * @see #isTableScrollbarEnabled()
+     */
+    @Px
+    public int tableScrollbarHeight() {
+        return tableScrollbarHeight;
+    }
+
+    /**
+     * Whether the horizontal scrollbar must be painted at all.
+     *
+     * <p>The scrollbar is an <em>opt-in</em> decoration, on exactly the same terms as the code
+     * block's: it exists only when it was given a height <b>and</b> at least one of its two
+     * colors. A table that can be scrolled without a scrollbar is a legitimate configuration —
+     * dragging it still works.
+     *
+     * @since 4.6.3
+     */
+    public boolean isTableScrollbarEnabled() {
+        return tableScrollbarHeight > 0
+                && (tableScrollbarTrackColor != 0 || tableScrollbarThumbColor != 0);
+    }
+
+    /**
+     * Color of the scrollbar track, or {@code 0} when it is not configured — in that case the
+     * track is not painted (a thumb-only scrollbar is fine).
+     *
+     * @since 4.6.3
+     */
+    @ColorInt
+    public int tableScrollbarTrackColor() {
+        return tableScrollbarTrackColor;
+    }
+
+    /**
+     * Color of the scrollbar thumb, or {@code 0} when it is not configured — in that case the
+     * thumb is not painted (a track-only scrollbar is fine).
+     *
+     * @since 4.6.3
+     */
+    @ColorInt
+    public int tableScrollbarThumbColor() {
+        return tableScrollbarThumbColor;
     }
 
     public int tableBorderWidth(@NonNull Paint paint) {
@@ -204,6 +280,9 @@ public class TableTheme {
         private int tableMaxColumnWidth;
         private boolean tableScrollEnabled = false;
         private int tableCornerRadius; // @since 4.6.3
+        private int tableScrollbarHeight; // @since 4.6.3
+        private int tableScrollbarTrackColor; // @since 4.6.3
+        private int tableScrollbarThumbColor; // @since 4.6.3
 
         @NonNull
         public Builder tableCellPadding(@Px int tableCellPadding) {
@@ -275,6 +354,47 @@ public class TableTheme {
         @NonNull
         public Builder tableCornerRadius(@Px int tableCornerRadius) {
             this.tableCornerRadius = tableCornerRadius;
+            return this;
+        }
+
+        /**
+         * Thickness the horizontal scrollbar is derived from, in pixels (the bar is painted
+         * {@code 0.3 ×} this tall). Pass {@code 0} (default) to drop the scrollbar entirely —
+         * the table still scrolls by dragging, it just no longer shows where it is.
+         *
+         * <p>It reserves <b>no</b> row height: the last row stays exactly as tall as the others
+         * and the bar is drawn on top of the card's bottom border. Only meaningful together with
+         * {@link #tableScrollEnabled(boolean)}: a table that cannot scroll never draws one.
+         *
+         * @since 4.6.3
+         */
+        @NonNull
+        public Builder tableScrollbarHeight(@Px int tableScrollbarHeight) {
+            this.tableScrollbarHeight = tableScrollbarHeight;
+            return this;
+        }
+
+        /**
+         * Color of the scrollbar track. Default {@code 0} = <b>not configured</b> = the track
+         * is not painted. Configure it (and/or the thumb color) to opt into a scrollbar.
+         *
+         * @since 4.6.3
+         */
+        @NonNull
+        public Builder tableScrollbarTrackColor(@ColorInt int color) {
+            this.tableScrollbarTrackColor = color;
+            return this;
+        }
+
+        /**
+         * Color of the scrollbar thumb. Default {@code 0} = <b>not configured</b> = the thumb
+         * is not painted. Configure it (and/or the track color) to opt into a scrollbar.
+         *
+         * @since 4.6.3
+         */
+        @NonNull
+        public Builder tableScrollbarThumbColor(@ColorInt int color) {
+            this.tableScrollbarThumbColor = color;
             return this;
         }
 

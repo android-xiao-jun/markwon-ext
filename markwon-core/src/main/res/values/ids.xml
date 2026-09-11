@@ -7,4 +7,7 @@
     <!-- @since 4.6.3 horizontal scrolling of code blocks -->
     <item name="markwon_code_block_scroll_helper" type="id" />
 
+    <!-- @since 4.6.3 one OnTouchListener per TextView; this one dispatches to all of them -->
+    <item name="markwon_gesture_router" type="id" />
+
 </resources>

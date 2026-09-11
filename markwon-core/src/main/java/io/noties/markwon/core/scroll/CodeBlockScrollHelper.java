@@ -182,7 +182,11 @@ final class CodeBlockScrollHelper implements View.OnTouchListener, View.OnLayout
         // helper does not handle is forwarded (it returns false), so MovementMethod based
         // link handling and text selection keep working — except inside a block that can
         // actually be scrolled, or on a copy button, where the gesture is consumed.
-        textView.setOnTouchListener(helper);
+        //
+        // Which is exactly why it goes through the router instead of `setOnTouchListener`: a
+        // TextView holds one listener only, and the table plugin needs one too. The router
+        // keeps both, handing the gesture to whoever consumes the ACTION_DOWN.
+        GestureRouter.attach(textView).add(CodeBlockScrollHelper.class, helper);
         textView.addOnLayoutChangeListener(helper);
     }
 

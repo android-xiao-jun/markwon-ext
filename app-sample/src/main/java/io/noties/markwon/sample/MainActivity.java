@@ -297,7 +297,9 @@ public class MainActivity extends AppCompatActivity {
                 .usePlugin(StrikethroughPlugin.create())
                 // - [ ] / - [x] 任务列表，复选框配色见 DefaultTheme#taskListPlugin
                 .usePlugin(DefaultTheme.taskListPlugin(this))
-                // GFM 表格，尺寸见 DefaultTheme#tableTheme
+                // GFM 表格，尺寸 / 圆角 / 横向滚动 / 底部滚动条见 DefaultTheme#tableTheme。
+                // 滚动的开关是 DefaultTheme.TABLE_SCROLL_ENABLED：打开后整块表格区域都能拖动，
+                // 底部那条滚动条和代码块是同一样式（共用 DefaultTheme 第五节那组常量）。
                 .usePlugin(TablePlugin.create(DefaultTheme.tableTheme(this)))
                 // 代码块横向滚动：不可换行 + 顶部语言栏 + 底部滚动条
                 // 开关在 DefaultTheme.CODE_BLOCK_SCROLLABLE，相关尺寸/颜色也在那里。

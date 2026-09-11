@@ -75,6 +75,10 @@ public class TableRowSpan extends ReplacementSpan {
     private final RectF rectF = new RectF();
     private final Path path = new Path();
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    // @since 4.6.3 — the scrollbar paints with an instance of its own, exactly like the code
+    // block's does. Sharing `paint` with the rest of the row made the bar inherit whatever the
+    // border/cell drawing left behind, and on device it silently never showed up at all.
+    private final Paint scrollbarPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
     private int width; // TextView width (display window)
     private int tableTotalWidth; // Actual content width
@@ -127,6 +131,10 @@ public class TableRowSpan extends ReplacementSpan {
         }
         tableSpan.ensureLayouts(width, textPaint, theme);
 
+        // @since 4.6.3 — the scrollbar contributes nothing to the line height. Every row of a
+        // table is exactly as tall as its content, so the last row is not taller than the ones
+        // above it. The bar is an overlay on the card's bottom edge (see #draw) — no band is
+        // reserved for it anywhere.
         height = tableSpan.rowContentHeight();
         if (fm != null && height > 0) {
             final int verticalPadding = theme.tableCellPadding() * 2;
@@ -178,6 +186,9 @@ public class TableRowSpan extends ReplacementSpan {
         final int padding = theme.tableCellPadding();
         final int size = layouts.size();
         final int rowHeight = bottom - top;
+        // @since 4.6.3 — no band is carved out of the row for the scrollbar any more: the
+        // content uses the whole row height, so every row is the same height.
+        final int contentBottom = rowHeight;
 
         // @since 4.6.3 — rounded outer corners, drawn directly (no clipping):
         // the first row rounds its top corners, the last row the bottom ones.
@@ -186,14 +197,27 @@ public class TableRowSpan extends ReplacementSpan {
         //   background  → drawn as a rounded path (anti-aliased)
         //   top/bottom lines and edge columns → indented by the radius
         //   the corner arc itself → drawn as a stroked arc segment
+        // @since 4.6.3 — a table wider than the viewport cannot be rounded: its corners belong to
+        // the content and travel with it, while the table's outline is pinned to the view. The
+        // two would disagree — the row background (clipped to the viewport) would fill in the
+        // area outside the pinned arc, leaving a rounded line drawn across a square corner. So
+        // an overflowing table is drawn square; only a table that fits keeps its rounded corners.
+        //
+        // Gated on scrollEnabled as well, so a table that cannot scroll (whose width is by
+        // definition constrained to the viewport) always keeps the rounded look regardless of
+        // any rounding difference between the measured and the clipped width.
+        final boolean overflow = scrollEnabled && tableTotalWidth > viewportWidth;
+
         int radius = theme.tableCornerRadius();
         float corner = 0F;
-        if (radius > 0 && rowHeight > 0 && tableTotalWidth > 0) {
+        if (!overflow && radius > 0 && rowHeight > 0 && tableTotalWidth > 0) {
             corner = Math.min(radius, Math.min(tableTotalWidth, rowHeight) / 2F);
         }
         final boolean first = corner > 0F && rowIndex == 0;
         final boolean last = corner > 0F && rowCount > 0 && rowIndex == rowCount - 1;
-        // geometric last row (independent of rounding) — see the bottom line below
+        // geometric first/last row (independent of rounding) — the card's top edge belongs to
+        // the first row, its bottom edge (and the scrollbar) to the last one
+        final boolean firstRow = rowIndex == 0;
         final boolean lastRow = rowCount > 0 && rowIndex == rowCount - 1;
 
         canvas.save();
@@ -277,16 +301,20 @@ public class TableRowSpan extends ReplacementSpan {
             try {
                 int colW = columnWidths[i];
 
+                // NB: the outer two columns are the *content's* left/right edge and run the
+                // full height of the row. They travel with the content, so on a table wider
+                // than the view they slide off the screen — the outline that stays put is the
+                // card's frame, drawn separately on the visible edges (see the card pass).
                 if (i == 0) {
                     canvas.drawRect(currentX, edgeTop, currentX + borderWidth, edgeBottom, paint);
                 } else {
-                    canvas.drawRect(currentX, 0, currentX + borderWidth, rowHeight, paint);
+                    canvas.drawRect(currentX, 0, currentX + borderWidth, contentBottom, paint);
                 }
                 if (i == size - 1) {
                     canvas.drawRect(currentX + colW - borderWidth, edgeTop, currentX + colW, edgeBottom, paint);
                 }
 
-                final int contentAreaHeight = rowHeight - padding * 2;
+                final int contentAreaHeight = contentBottom - padding * 2;
                 final int heightDiff = Math.max(0, (contentAreaHeight - layout.getHeight()) / 2);
 
                 canvas.translate(currentX + padding, padding + heightDiff);
@@ -303,19 +331,29 @@ public class TableRowSpan extends ReplacementSpan {
             }
         }
 
-        // 4. Scrollbar (only when scrolling is enabled and content exceeds viewport)
-        if (scrollEnabled) {
-            final int drawableWidth = tableSpan.getTextViewWidth();
-            if (tableTotalWidth > drawableWidth) {
-                final Spanned spanned = (Spanned) text;
-                TableSpan[] allTableSpans = spanned.getSpans(start, end, TableSpan.class);
-                if (allTableSpans.length > 0 && spanned.getSpanEnd(allTableSpans[0]) == end) {
-                    drawScrollbar(canvas, bottom - top, scrollX, drawableWidth);
-                }
-            }
+        canvas.restore();
+
+        // @since 4.6.3 — the card pass. A table owns a frame of its own: its four border lines
+        // are pinned to the *visible* area ([x, x + frameWidth]) and stay there while the
+        // content slides under them. Without this pass the two outer verticals simply scroll
+        // off-screen, so a table wider than the view ends up outlined on one side only — and in
+        // the middle of a drag it has no left or right border at all. Overlapping the content's
+        // own border lines (at scrollX == 0 the two coincide exactly) is intended: the user sees
+        // one frame either way.
+        final int frameWidth = viewportWidth > 0
+                ? Math.min(tableTotalWidth, viewportWidth)
+                : tableTotalWidth;
+
+        if (overflow) {
+            drawCard(canvas, p, x, top, rowHeight, frameWidth, borderWidth, firstRow, lastRow);
         }
 
-        canvas.restore();
+        // The scrollbar belongs to the card as well: it is pinned to the bottom edge of the
+        // visible area, so it can never slide sideways with the table. It is drawn as an
+        // overlay — the last row is no taller than the others because of it.
+        if (lastRow && theme.isTableScrollbarEnabled() && tableSpan.canScroll()) {
+            drawScrollbar(canvas, x, top, rowHeight, frameWidth, borderWidth);
+        }
 
         if (height != maxHeight) {
 //            if (invalidator != null) {
@@ -382,17 +420,138 @@ public class TableRowSpan extends ReplacementSpan {
         path.close();
     }
 
-    private void drawScrollbar(Canvas canvas, int rowHeight, int scrollX, int drawableWidth) {
-        int scrollbarHeight = 6;
-        int scrollbarMargin = 2;
-        float ratio = (float) drawableWidth / tableTotalWidth;
-        int scrollbarWidth = (int) (drawableWidth * ratio);
-        int scrollbarPos = (int) (scrollX * ratio);
+    /**
+     * The table's frame: the four border lines drawn on the edges of the <b>visible</b> area
+     * ({@code left} … {@code left + frameWidth}) rather than on the edges of the content.
+     *
+     * <p>Called by every row of a table that is wider than the viewport — a table that fits
+     * already draws its own borders exactly there, so this pass would be a pure duplicate. It is
+     * drawn <b>outside</b> the content translation, and that is precisely what keeps the frame
+     * in place while the content slides under it, so a scrolled table always keeps a border on
+     * <em>both</em> sides.
+     *
+     * <p>The frame is always square: an overflowing table is drawn without rounded corners (see
+     * {@code overflow} in {@link #draw}), because a corner belongs to the content and travels
+     * with it while the frame does not.
+     *
+     * <p>Every row draws the two verticals (so the frame is continuous down the table); the top
+     * line belongs to the first row, the bottom one to the last, exactly like the content's own
+     * horizontal separators.
+     *
+     * @since 4.6.3
+     */
+    private void drawCard(
+            @NonNull Canvas canvas,
+            @NonNull Paint source,
+            float left,
+            int top,
+            int rowHeight,
+            int frameWidth,
+            int borderWidth,
+            boolean firstRow,
+            boolean lastRow) {
 
-        paint.setColor(0x88888888);
-        rect.set(scrollX + scrollbarPos, rowHeight - scrollbarHeight - scrollbarMargin,
-                scrollX + scrollbarPos + scrollbarWidth, rowHeight - scrollbarMargin);
-        canvas.drawRect(rect, paint);
+        if (frameWidth <= 0 || rowHeight <= 0) {
+            return;
+        }
+
+        paint.set(source);
+        theme.applyTableBorderStyle(paint);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setAntiAlias(true);
+
+        final float right = left + frameWidth;
+        final float topEdge = top;
+        final float bottomEdge = top + rowHeight;
+
+        canvas.drawRect(left, topEdge, left + borderWidth, bottomEdge, paint);
+        canvas.drawRect(right - borderWidth, topEdge, right, bottomEdge, paint);
+
+        if (firstRow) {
+            canvas.drawRect(left, topEdge, right, topEdge + borderWidth, paint);
+        }
+
+        if (lastRow) {
+            canvas.drawRect(left, bottomEdge - borderWidth, right, bottomEdge, paint);
+        }
+    }
+
+    /**
+     * Horizontal scrollbar, drawn with <b>the code block's recipe</b>
+     * ({@code CodeBlockSpan#drawScrollbar}): a rounded bar whose length is proportional to how
+     * much of the content the viewport shows, its position taken from
+     * {@link TableSpan#getScrollRatio()}; the track is painted first, the thumb on top of it.
+     *
+     * <p><b>It reserves no height.</b> The code block can keep a footer row for its bar; a table
+     * row cannot, because reserving room there would make the last row taller than all the
+     * others. So the bar is an overlay instead: it hugs the inner side of the card's bottom
+     * border, inside the row, in the bottom padding the cells already leave free.
+     *
+     * <p>It paints with {@link #scrollbarPaint} — an instance of its own, like the code block
+     * does — and fills a rounded rect rather than stroking a line, so no state left on the row's
+     * paint (and no stroke cap quirk) can stop it from showing up.
+     *
+     * <p>Coordinates are the <b>text area's</b> (Layout coordinates): the caller has already
+     * undone the content translation, so {@code left} … {@code left + frameWidth} is what the
+     * user actually sees, and the track can never be wider than that.
+     *
+     * @since 4.6.3
+     */
+    private void drawScrollbar(
+            @NonNull Canvas canvas,
+            float left,
+            int top,
+            int rowHeight,
+            int frameWidth,
+            int borderWidth) {
+
+        final int contentWidth = tableSpan.getTableWidth();
+        final int viewportWidth = tableSpan.getTextViewWidth();
+        if (contentWidth <= 0 || viewportWidth <= 0) {
+            return;
+        }
+
+        // the track is inset like every other piece of content of the table
+        final float trackLeft = left + theme.tableCellPadding();
+        final float trackRight = left + frameWidth - theme.tableCellPadding();
+        final float trackWidth = trackRight - trackLeft;
+        if (trackWidth <= 0F) {
+            return;
+        }
+
+        final float thickness = Math.max(1F, theme.tableScrollbarHeight() * 0.3F);
+        // sits directly on top of the card's bottom border — inside the row, never outside it
+        final float barBottom = top + rowHeight - borderWidth;
+        final float barTop = barBottom - thickness;
+        if (barTop < top) {
+            return;
+        }
+        final float radius = thickness / 2F;
+
+        scrollbarPaint.reset();
+        scrollbarPaint.setAntiAlias(true);
+        scrollbarPaint.setStyle(Paint.Style.FILL);
+
+        final int trackColor = theme.tableScrollbarTrackColor();
+        if (trackColor != 0) {
+            scrollbarPaint.setColor(trackColor);
+            canvas.drawRoundRect(
+                    trackLeft, barTop, trackRight, barBottom, radius, radius, scrollbarPaint);
+        }
+
+        final int thumbColor = theme.tableScrollbarThumbColor();
+        if (thumbColor != 0) {
+            final float ratio = viewportWidth / (float) Math.max(viewportWidth, contentWidth);
+            final float thumbWidth = Math.min(
+                    trackWidth,
+                    Math.max(thickness * 2F, trackWidth * ratio));
+            final float thumbLeft = trackLeft
+                    + (trackWidth - thumbWidth) * tableSpan.getScrollRatio();
+
+            scrollbarPaint.setColor(thumbColor);
+            canvas.drawRoundRect(
+                    thumbLeft, barTop, thumbLeft + thumbWidth, barBottom, radius, radius, scrollbarPaint);
+        }
     }
 
     int cellCount() {

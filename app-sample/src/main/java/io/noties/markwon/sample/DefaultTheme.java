@@ -66,7 +66,10 @@ import io.noties.markwon.utils.Dip;
  *     <tr><td>语言栏高度 {@code codeBlockHeaderHeight}</td>
  *         <td><b>不配置 = 不显示</b>（不预留高度、不画标签）；配置 &gt; 0 时取
  *             {@code max(配置值, 一行文字高)} —— 高度不够展示文字就按文字高度撑开</td><td>—</td></tr>
- *     <tr><td>滚动条高度 {@code codeBlockScrollbarHeight}</td><td>{@code 0}（<b>不显示滚动条</b>）</td><td>—</td></tr>
+ *     <tr><td>滚动条高度 {@code codeBlockScrollbarHeight} / 表格 {@code tableScrollbarHeight}</td>
+ *         <td>{@code 0}（<b>不显示滚动条</b>）</td><td>—</td></tr>
+ *     <tr><td>表格滚动条的两色 {@code tableScrollbarTrackColor} / {@code ThumbColor}</td>
+ *         <td>{@code 0} = <b>不绘制</b>（最后一行的滚动条留白也不会撑出来）</td><td>—</td></tr>
  *     <tr><td>表格边框 {@code tableBorderColor}</td><td>文字色 × 75%</td><td>{@code TABLE_BORDER_DEF_ALPHA = 75}</td></tr>
  *     <tr><td>表格奇数行底 {@code tableOddRowBackgroundColor}</td><td><b>{@code #16000000}</b>，见下</td><td>{@code TABLE_ODD_ROW_DEF_ALPHA = 22}</td></tr>
  * </table>
@@ -173,11 +176,7 @@ public final class DefaultTheme {
     /** 行内代码左右内缩（背景块内的文字留白）。默认 4dp。 */
     private static final int CODE_HORIZONTAL_PADDING_DP = 0;
 
-    /**
-     * 代码块底部为滚动条保留的高度。<b>框架默认 0</b> = <b>不显示滚动条</b>
-     * （不画、页脚也不预留那一行）；示例给 14dp，配合 {@link #CODE_BLOCK_SCROLLBAR_THUMB_COLOR} 才会出现。
-     */
-    private static final int CODE_BLOCK_SCROLLBAR_HEIGHT_DP = 14;
+    // 代码块底部滚动条的高度 / 两色见第五节 —— 表格用的是同一组常量，两处观感才一致。
 
     /** 行内代码背景圆角。默认 0（直角）。 */
     private static final int CODE_BACKGROUND_RADIUS = 4;
@@ -207,19 +206,8 @@ public final class DefaultTheme {
     // =====================================================================
 
     /**
-     * 横向滚动条轨道颜色。{@code 0} = <b>不配置</b> = <b>不绘制轨道</b>（框架默认）。
-     * <p>滚动条整体是「可选装饰」：只有配了高度 <b>且</b> 轨道/滑块至少有一个颜色时才存在，
-     * 否则滚动代码块末尾不预留那一行。
+     * 横向滚动条轨道颜色 / 滑块颜色见第五节（代码块与表格共用同一组常量）。
      */
-    @ColorInt
-    private static final int CODE_BLOCK_SCROLLBAR_TRACK_COLOR = 0;
-
-    /**
-     * 横向滚动条滑块颜色。{@code 0} = <b>不配置</b> = 不绘制滑块（框架默认）。
-     * <p>app-sample 给了一个值，好让滚动条看得见；改成 {@code 0} 即回到「什么都不画」。
-     */
-    @ColorInt
-    private static final int CODE_BLOCK_SCROLLBAR_THUMB_COLOR = 0xFFCACACA;
 
     // NB: 语言栏没有独立底色 —— 它本来就是代码块的一部分，露出
     //     `codeBlockBackgroundColor` 即可；`codeBlockHeaderBackgroundColor` 是重复定义，已移除。
@@ -251,7 +239,40 @@ public final class DefaultTheme {
     private static final int CODE_BLOCK_TEXT_COLOR = 0;
 
     // =====================================================================
-    // 五、GFM 表格（TableTheme）
+    // 五、横向滚动条（代码块 + 表格共用同一套样式）
+    //     4.6.3 新增。框架里两处各自有一套参数（MarkwonTheme#codeBlockScrollbar* 与
+    //     TableTheme#tableScrollbar*），这里用**同一组常量**喂给两边 ——
+    //     「滚动条长得一样」是靠同一个值保证的，不是巧合。
+    // =====================================================================
+
+    /**
+     * 滚动条高度（实际画出来的是它的 {@code 0.3} 倍粗的一条，和代码块一致）。
+     *
+     * <p><b>框架默认 0</b> = <b>不显示滚动条</b>：不画。示例给 14dp，配合下面的滑块色才会出现。
+     *
+     * <p><b>两边都不占行高</b>：代码块把这条压在<b>页脚行</b>里；表格没有页脚行可给 ——
+     * 一旦预留，最后一行就会比上面所有行都高，所以表格的滚动条是<b>覆盖</b>在卡片底边框内侧的，
+     * 一行的高度完全由内容决定。
+     *
+     * <p>滚动条整体是「可选装饰」，判据两处一致：<b>高度 &gt; 0</b> 且 <b>轨道/滑块至少有一个颜色</b>。
+     */
+    private static final int SCROLLBAR_HEIGHT_DP = 14;
+
+    /**
+     * 滚动条轨道颜色。{@code 0} = <b>不配置</b> = 不绘制轨道。
+     */
+    @ColorInt
+    private static final int SCROLLBAR_TRACK_COLOR = 0;
+
+    /**
+     * 滚动条滑块颜色。{@code 0} = <b>不配置</b> = 不绘制滑块。
+     * <p>示例给了一个值，好让滚动条看得见；改成 {@code 0} 即回到「什么都不画」。
+     */
+    @ColorInt
+    private static final int SCROLLBAR_THUMB_COLOR = 0xFFCACACA;
+
+    // =====================================================================
+    // 六、GFM 表格（TableTheme）
     //     （来源：TableTheme.buildWithDefaults(Context)）
     // =====================================================================
 
@@ -267,11 +288,21 @@ public final class DefaultTheme {
     /** 表格外圈圆角。默认 0（直角）。 */
     private static final int TABLE_CORNER_RADIUS = 4;
 
-    /** 表格能否横向滚动。默认 {@code false}（宽度约束在视口内）。 */
-    public static final boolean TABLE_SCROLL_ENABLED = false;
+    /**
+     * 表格能否横向滚动。默认 {@code false}（宽度约束在视口内，列等宽）。
+     *
+     * <p>打开后：列宽按内容+ {@link #TABLE_MAX_COLUMN_WIDTH_DP} 上限计算，总宽超出视口即可
+     * 横向滚动 —— <b>整块表格区域拖拽都能滚</b>（含单元格、边框、滚动条、以及短行右侧的空白），
+     * 纵向手势仍然交回外层 {@code ScrollView}。
+     *
+     * <p>⚠️ 与代码块不同，这里<b>不</b>需要宿主再设 {@code TableAwareMovementMethod}：
+     * 拖拽由插件自己装的 {@code OnTouchListener}（经 {@code GestureRouter} 分发）负责；
+     * 若宿主确实设了那个 MovementMethod，单击（未拖动）会被回放给它，单元格内链接照常可点。
+     */
+    public static final boolean TABLE_SCROLL_ENABLED = true;
 
     // =====================================================================
-    // 六、代码块「复制」按钮（CodeBlockCopyTheme）
+    // 七、代码块「复制」按钮（CodeBlockCopyTheme）
     //     框架默认 null = 没有这个按钮（opt-in）。示例给了一个文字版按钮。
     //     ⚠️ 这份样式是「插件」的配置，不是 MarkwonTheme 的 —— 见 #codeBlockScrollPlugin()
     // =====================================================================
@@ -306,7 +337,7 @@ public final class DefaultTheme {
     private static final String CODE_BLOCK_COPY_SUCCESS_TEXT = "已复制";
 
     // =====================================================================
-    // 七、插件开关（不是 MarkwonTheme 的字段，靠「注册哪个插件 / 传什么参数」控制）
+    // 八、插件开关（不是 MarkwonTheme 的字段，靠「注册哪个插件 / 传什么参数」控制）
     // =====================================================================
 
     /**
@@ -353,7 +384,7 @@ public final class DefaultTheme {
     // =====================================================================
 
     /**
-     * {@link MarkwonTheme} 插件：把上面第一~四节的值显式写回去。
+     * {@link MarkwonTheme} 插件：把上面第一~五节的值显式写回去。
      *
      * <p><b>必须注册在 {@code SyntaxHighlightPlugin} 之后</b>（理由见类注释）。
      */
@@ -373,20 +404,21 @@ public final class DefaultTheme {
                         .codeBlockPadding(dp(context, CODE_BLOCK_PADDING_DP))
                         .codeBlockHeaderHeight(dp(context, CODE_BLOCK_HEADER_HEIGHT_DP))
                         .codeHorizontalPadding(dp(context, CODE_HORIZONTAL_PADDING_DP))
-                        .codeBlockScrollbarHeight(dp(context, CODE_BLOCK_SCROLLBAR_HEIGHT_DP))
                         .codeBackgroundRadius(dp(context, CODE_BACKGROUND_RADIUS))
                         .codeBlockBackgroundRadius(dp(context, CODE_BLOCK_BACKGROUND_RADIUS))
                         .bulletWidth(BULLET_WIDTH)
                         .codeTextSize(CODE_TEXT_SIZE)
                         .codeBlockTextSize(CODE_BLOCK_TEXT_SIZE)
                         // ---------- 颜色（第三、四节）----------
-                        // 滚动条两色是「不配置就没有这个属性」：传 0 = 不绘制。想要就填具体色值。
-                        .codeBlockScrollbarTrackColor(CODE_BLOCK_SCROLLBAR_TRACK_COLOR)
-                        .codeBlockScrollbarThumbColor(CODE_BLOCK_SCROLLBAR_THUMB_COLOR)
                         // 语言栏没有自己的文字样式/底色，直接复用代码块的这两项
                         // （复制按钮的样式不在这里 —— 它是 CodeBlockScrollPlugin 自己的配置，
                         //   见 #codeBlockScrollPlugin()，不经过全局 MarkwonTheme）
                         .codeBlockTextColor(CODE_BLOCK_TEXT_COLOR)
+                        // ---------- 横向滚动条（第五节，与表格共用同一组值）----------
+                        // 「不配置就没有这个属性」：高度 0 或两色都是 0 = 不画、不预留。
+                        .codeBlockScrollbarHeight(dp(context, SCROLLBAR_HEIGHT_DP))
+                        .codeBlockScrollbarTrackColor(SCROLLBAR_TRACK_COLOR)
+                        .codeBlockScrollbarThumbColor(SCROLLBAR_THUMB_COLOR)
                         // ---------- 字号梯度 / 开关 ----------
                         .headingTextSizeMultipliers(HEADING_TEXT_SIZE_MULTIPLIERS)
                         // 链接默认带下划线（框架默认 true）
@@ -440,8 +472,17 @@ public final class DefaultTheme {
     }
 
     /**
-     * GFM 表格主题：显式写回 {@link TableTheme} 的三个尺寸 + 滚动开关，
+     * GFM 表格主题：显式写回 {@link TableTheme} 的三个尺寸 + 圆角 + 滚动开关 + 底部滚动条，
      * 颜色保持默认（表头/偶数行无底色，奇数行 = 文字色 × 22%，边框 = 文字色 × 75%）。
+     *
+     * <p>底部滚动条用的是第五节的共用常量 —— 和代码块底部那条<b>同一个高度、同一个滑块色</b>，
+     * 画法也一致（先铺轨道再压滑块，滑块长度按「视口 / 内容」比例，位置取滚动比例）。
+     * 区别只在<b>位置</b>：代码块把它压在页脚行里，表格没有页脚行可给，于是覆盖在卡片底边框内侧
+     * —— 表格最后一行的高度完全由内容决定，不会因为滚动条变高。
+     * 不配这两项就没有滚动条（表格照样能拖，只是看不到当前位置）。
+     *
+     * <p>表格比视口宽时，还会在<b>可视区四条边</b>上补一圈「卡片外框」（内容自己的左右边线会随内容
+     * 滚出屏幕，外框不滚）—— 所以拖动过程中左右两侧都不会缺边。
      */
     @NonNull
     public static TableTheme tableTheme(@NonNull Context context) {
@@ -451,6 +492,9 @@ public final class DefaultTheme {
                 .tableMaxColumnWidth(dp(context, TABLE_MAX_COLUMN_WIDTH_DP))
                 .tableCornerRadius(dp(context, TABLE_CORNER_RADIUS))
                 .tableScrollEnabled(TABLE_SCROLL_ENABLED)
+                .tableScrollbarHeight(dp(context, SCROLLBAR_HEIGHT_DP))
+                .tableScrollbarTrackColor(SCROLLBAR_TRACK_COLOR)
+                .tableScrollbarThumbColor(SCROLLBAR_THUMB_COLOR)
                 // ↓ 默认不设置。想固定成具体色，取消注释并填值：
                 // .tableBorderColor(0xBF000000)          // 默认 = 文字色 × 75%
                 // .tableOddRowBackgroundColor(0x38000000) // 默认 = 文字色 × 22%（斑马纹）
