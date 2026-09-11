@@ -6,8 +6,11 @@ import android.text.style.UnderlineSpan;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
 
 import io.noties.markwon.AbstractMarkwonPlugin;
+import io.noties.markwon.core.CodeBlockCopyTheme;
 import io.noties.markwon.core.MarkwonTheme;
 import io.noties.markwon.core.scroll.CodeBlockScrollPlugin;
 import io.noties.markwon.ext.latex.JLatexMathPlugin;
@@ -100,6 +103,14 @@ import io.noties.markwon.utils.Dip;
  * .usePlugin(SyntaxHighlightPlugin.create(prism4j, DefaultTheme.syntaxTheme(), "java"))
  * .usePlugin(DefaultTheme.markwonPlugin(this))        // ← 最后
  * </pre>
+ *
+ * <h3>⚠️ 四、复制按钮的配置挂在「插件」上，不在 MarkwonTheme 里</h3>
+ * 代码块 header 行右侧的「复制」按钮是 {@code CodeBlockScrollPlugin} 自己的能力，所以它的样式
+ * （{@link #codeBlockCopyTheme(Context)}）和行为（{@code onCodeBlockCopy}）都配置在<b>那个插件实例</b>上，
+ * 见 {@link #codeBlockScrollPlugin(Context)}。<b>不要在 {@link #markwonPlugin(Context)} 里找它</b> ——
+ * 它刻意不经过全局 {@code MarkwonTheme}：一个插件的私有功能不该从库的每个角落都能配。
+ *
+ * <p>它同样只在<b>横向滚动</b>代码块（存在 header 行）时才可能存在。
  *
  * @since 4.6.3
  */
@@ -260,7 +271,42 @@ public final class DefaultTheme {
     public static final boolean TABLE_SCROLL_ENABLED = false;
 
     // =====================================================================
-    // 六、插件开关（不是 MarkwonTheme 的字段，靠「注册哪个插件 / 传什么参数」控制）
+    // 六、代码块「复制」按钮（CodeBlockCopyTheme）
+    //     框架默认 null = 没有这个按钮（opt-in）。示例给了一个文字版按钮。
+    //     ⚠️ 这份样式是「插件」的配置，不是 MarkwonTheme 的 —— 见 #codeBlockScrollPlugin()
+    // =====================================================================
+
+    /**
+     * 代码块 header 行右侧「复制」按钮开关。
+     *
+     * <p><b>框架默认关闭</b>：插件上的 {@code codeBlockCopyTheme(...)} 不配置就是 {@code null}，
+     * 和滚动条一样属于「不配置就没有这个属性」。
+     *
+     * <p>按钮由 <b>header 行</b>承载，所以只在 {@link #CODE_BLOCK_SCROLLABLE} 打开（代码块可
+     * 滚动）时才存在。另外：只要按钮是开的，<b>没配过</b>的 header 行高度会自动兜底成一行
+     * 文字高（显式写 {@code 0} 仍然是「没有这一行」，按钮也随之消失）。
+     */
+    public static final boolean CODE_BLOCK_COPY_ENABLED = true;
+
+    /**
+     * 复制按钮的文案。{@code null} = 用图标（{@link CodeBlockCopyTheme.Builder#text}，
+     * 再兜底到框架内置的「双纸片」矢量图）。
+     */
+    @Nullable
+    private static final String CODE_BLOCK_COPY_TEXT = "复制";
+
+    /**
+     * 代码块「复制」按钮按下后临时（约 1.2s）显示的文案。{@code null} = 按钮不留任何变化。
+     *
+     * <p>注意它确认的是<b>按下</b>而不是「复制成功」—— 库不碰剪贴板，压根不知道宿主复制成没成。
+     * 想报告真实结果（或干脆不要按钮反馈），把这里留 {@code null}，在宿主自己的
+     * {@code CodeBlockScrollPlugin#onCodeBlockCopy} 里说（Toast / Snackbar / 埋点）。
+     */
+    @Nullable
+    private static final String CODE_BLOCK_COPY_SUCCESS_TEXT = "已复制";
+
+    // =====================================================================
+    // 七、插件开关（不是 MarkwonTheme 的字段，靠「注册哪个插件 / 传什么参数」控制）
     // =====================================================================
 
     /**
@@ -338,6 +384,8 @@ public final class DefaultTheme {
                         .codeBlockScrollbarTrackColor(CODE_BLOCK_SCROLLBAR_TRACK_COLOR)
                         .codeBlockScrollbarThumbColor(CODE_BLOCK_SCROLLBAR_THUMB_COLOR)
                         // 语言栏没有自己的文字样式/底色，直接复用代码块的这两项
+                        // （复制按钮的样式不在这里 —— 它是 CodeBlockScrollPlugin 自己的配置，
+                        //   见 #codeBlockScrollPlugin()，不经过全局 MarkwonTheme）
                         .codeBlockTextColor(CODE_BLOCK_TEXT_COLOR)
                         // ---------- 字号梯度 / 开关 ----------
                         .headingTextSizeMultipliers(HEADING_TEXT_SIZE_MULTIPLIERS)
@@ -413,12 +461,49 @@ public final class DefaultTheme {
 
     /**
      * 代码块横向滚动插件。仅当 {@link #CODE_BLOCK_SCROLLABLE} 为 true 时注册。
-     * <p>它做两件事：把 {@code codeBlockScrollable} 置 true；在 {@code beforeSetText} 时
-     * 往每行 {@code CodeBlockLineSpan} 注入 viewport（不注入就滚不动）。
+     *
+     * <p>它做四件事：把 {@code codeBlockScrollable} 置 true；在 {@code beforeSetText} 时往每行
+     * {@code CodeBlockLineSpan} 注入 viewport（不注入就滚不动）；把复制按钮的<b>样式</b>
+     * 交给 {@code CodeBlockSpanFactory}；接管落在<b>复制按钮</b>上的点击并回调宿主。
+     *
+     * <p>⚠️ 复制按钮是<b>本插件自己的配置</b>（样式见 {@link #codeBlockCopyTheme(Context)}，
+     * 行为见 {@code onCodeBlockCopy}），<b>不经过全局 {@code MarkwonTheme}</b> ——
+     * 所以别去 {@link #markwonPlugin(Context)} 里找它。
+     *
+     * <p>⚠️ <b>库不写剪贴板</b>：必须自己接 {@code onCodeBlockCopy} 才能真正复制，
+     * 见 {@code MainActivity#createMarkwon}。不接的话按钮按下没反应。
      */
     @NonNull
-    public static CodeBlockScrollPlugin codeBlockScrollPlugin() {
-        return CodeBlockScrollPlugin.create();
+    public static CodeBlockScrollPlugin codeBlockScrollPlugin(@NonNull final Context context) {
+        return CodeBlockScrollPlugin.create()
+                // 样式由插件自己持有并直接交给 span factory，不塞进 MarkwonTheme
+                .codeBlockCopyTheme(codeBlockCopyTheme(context));
+    }
+
+    /**
+     * 代码块「复制」按钮的样式对象。
+     *
+     * <p>和 {@link TableTheme} 一样，这是一个<b>独立的主题对象</b>，而不是散在
+     * {@code MarkwonTheme.Builder} 上的六个 setter。更进一步：它连 {@code MarkwonTheme} 都不进 ——
+     * 复制按钮是 {@code CodeBlockScrollPlugin} 自己的能力，样式就由插件的
+     * {@code codeBlockCopyTheme(...)} 收下（见 {@link #codeBlockScrollPlugin(Context)}）。
+     *
+     * @return {@link #CODE_BLOCK_COPY_ENABLED} 为 false 时返回 {@code null}（= 没有按钮）
+     */
+    @Nullable
+    public static CodeBlockCopyTheme codeBlockCopyTheme(@NonNull final Context context) {
+        if (!CODE_BLOCK_COPY_ENABLED) {
+            return null;
+        }
+        return CodeBlockCopyTheme.builder()
+                .enabled(true)
+                .text(CODE_BLOCK_COPY_TEXT)
+                .successText(CODE_BLOCK_COPY_SUCCESS_TEXT)
+                // ↓ 默认不设置。想微调，取消注释并填值：
+//                .icon(AppCompatResources.getDrawable(context, R.drawable.ic_msg_pop_copy_txt)) // 图标优先于文字
+//                .textSize(sp(context, 12))            // 默认 = 跟随语言栏（codeBlockTextSize → codeTextSize）
+//                 .textColor(0xFF3B82F6)            // 默认 = 跟随语言栏文字色
+                .build();
     }
 
     /**

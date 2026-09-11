@@ -213,6 +213,10 @@ public class MarkwonTheme {
     // thumb is not painted. Configure it (and/or the track) to get a scrollbar.
     protected final int codeBlockScrollbarThumbColor;
 
+    // NB: the copy button of the header row is deliberately *not* here. It is one feature of
+    // CodeBlockScrollPlugin, so its style (CodeBlockCopyTheme) is owned by that plugin and
+    // handed straight to the span factory — it never travels through the global theme.
+
     // by default paint.getStrokeWidth
     protected final int headingBreakHeight;
 
@@ -544,38 +548,20 @@ public class MarkwonTheme {
     }
 
     /**
-     * Raw configured height of the header row (the one holding the language label), in pixels,
-     * or a <b>negative</b> value ({@code UNSET}) when it is not configured — use
-     * {@link #getCodeBlockHeaderHeight(Paint)} to obtain a usable height.
+     * Raw configured height of the header row (the one holding the language label and/or the
+     * copy button), in pixels, or a <b>negative</b> value ({@code UNSET}) when it is not
+     * configured.
      *
-     * @see #getCodeBlockHeaderHeight(Paint)
+     * <p>This is the raw knob, deliberately without any resolution logic: the row is measured
+     * and painted from one single place ({@code CodeBlockLineSpan#headerHeight}) so that the
+     * two can never drift apart — resolving it here as well used to be a way to get a row and
+     * its content disagreeing about their own height.
+     *
      * @since 4.6.3
      */
     @Px
     public int getCodeBlockHeaderHeight() {
         return codeBlockHeaderHeight;
-    }
-
-    /**
-     * Height of the header row, resolved against {@code paint}:
-     * <ul>
-     *     <li>a height that was <b>not configured</b> ({@code UNSET}) as well as an explicit
-     *     {@code 0} resolve to {@code 0} — there simply is <b>no header row</b>: no room is
-     *     reserved and the language label is not painted (the row is opt-in, same rule as
-     *     {@link #isCodeBlockScrollbarEnabled()});</li>
-     *     <li>any positive height is honoured, but is <b>raised to the height of a line of
-     *     text</b> ({@code descent - ascent} of the supplied paint) when it is too short for
-     *     the label — a row that clips its own label is never useful.</li>
-     * </ul>
-     *
-     * @since 4.6.3
-     */
-    @Px
-    public int getCodeBlockHeaderHeight(@NonNull Paint paint) {
-        if (codeBlockHeaderHeight <= 0) {
-            return 0;
-        }
-        return Math.max(codeBlockHeaderHeight, Math.round(paint.descent() - paint.ascent()));
     }
 
     /**
@@ -755,6 +741,8 @@ public class MarkwonTheme {
         private int codeBlockScrollbarHeight = UNSET; // @since 4.6.3
         private int codeBlockScrollbarTrackColor; // @since 4.6.3
         private int codeBlockScrollbarThumbColor; // @since 4.6.3
+        // NB: no codeBlockCopyTheme — the copy button is CodeBlockScrollPlugin's own feature
+        // and its style is handed over by that plugin, not through the global theme.
         private int headingBreakHeight = -1;
         private int headingBreakColor;
         private Typeface headingTypeface;
@@ -1047,6 +1035,15 @@ public class MarkwonTheme {
             this.codeBlockScrollbarThumbColor = color;
             return this;
         }
+
+        /**
+         * NB: there is no {@code codeBlockCopyTheme} setter (@since 4.6.3). The copy button of
+         * the header row is a feature of {@code CodeBlockScrollPlugin} and nowhere else, so its
+         * style ({@link CodeBlockCopyTheme}) is supplied to that plugin
+         * ({@code CodeBlockScrollPlugin#codeBlockCopyTheme}) and handed by it straight to the
+         * span factory. Routing it through the global theme would have made one plugin's
+         * private concern visible — and configurable — from every corner of the library.
+         */
 
         public Builder headingBreakHeight(@Px int headingBreakHeight) {
             this.headingBreakHeight = headingBreakHeight;

@@ -381,6 +381,10 @@ public class CorePlugin extends AbstractMarkwonPlugin {
         // @since 4.1.1
         CoreProps.CODE_BLOCK_INFO.set(visitor.renderProps(), info);
 
+        // @since 4.6.3 — the original literal, read back by CodeBlockSpanFactory and used as
+        // the payload of the copy button (see CoreProps#CODE_BLOCK_CODE)
+        CoreProps.CODE_BLOCK_CODE.set(visitor.renderProps(), code);
+
         // @since 4.6.3
         final MarkwonTheme theme = visitor.configuration().theme();
         if (theme.isCodeBlockScrollable()) {

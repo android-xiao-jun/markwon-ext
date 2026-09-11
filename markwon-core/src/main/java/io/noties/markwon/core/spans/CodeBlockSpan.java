@@ -5,7 +5,9 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.Drawable;
 import android.os.Build;
+import android.os.SystemClock;
 import android.text.Layout;
 import android.text.Spanned;
 import android.text.TextPaint;
@@ -15,6 +17,7 @@ import android.text.style.MetricAffectingSpan;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import io.noties.markwon.core.CodeBlockCopyTheme;
 import io.noties.markwon.core.MarkwonTheme;
 import io.noties.markwon.core.scroll.CodeBlockScrollState;
 
@@ -38,6 +41,27 @@ public class CodeBlockSpan extends MetricAffectingSpan implements LeadingMarginS
     private final String language;
 
     /**
+     * Original source of the block (the literal, before syntax highlighting) — the payload of
+     * the header's copy button.
+     *
+     * @since 4.6.3
+     */
+    @Nullable
+    private final String code;
+
+    /**
+     * Copy-button style of the header row, or {@code null} for "no button".
+     *
+     * <p>Handed over by {@code CodeBlockScrollPlugin} through the span factory — the button is
+     * that plugin's feature, so its style belongs to the plugin and never travels through the
+     * global {@link MarkwonTheme}.
+     *
+     * @since 4.6.3
+     */
+    @Nullable
+    private final CodeBlockCopyTheme copyTheme;
+
+    /**
      * Shared scroll state of this block. {@code null} when the block is not scrollable
      * ({@link MarkwonTheme#isCodeBlockScrollable()}), in which case no header and no
      * scrollbar are drawn.
@@ -48,21 +72,52 @@ public class CodeBlockSpan extends MetricAffectingSpan implements LeadingMarginS
     private final CodeBlockScrollState scrollState;
 
     private final Paint headerPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint copyPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint scrollbarPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
+    /**
+     * Touch target of the copy button, in <b>Layout</b> coordinates (the same space
+     * {@code CodeBlockScrollHelper} converts a {@code MotionEvent} into). Unlike the visual
+     * button it spans the whole height of the header row, so a finger does not have to land on
+     * the glyph itself.
+     *
+     * <p>It is (re)computed while the header is painted — the drawing pass and the touch that
+     * follows run on the same thread, and a touch can only reach a button that has been drawn.
+     * Width {@code 0} means "no button", i.e. {@link #hitCopy(float, float)} never matches.
+     *
+     * @since 4.6.3
+     */
+    private final RectF copyBounds = new RectF();
+
+    /**
+     * {@link SystemClock#uptimeMillis()} until which the button shows
+     * {@link CodeBlockCopyTheme#getSuccessText()} instead of its normal content.
+     *
+     * @since 4.6.3
+     */
+    private long copyFeedbackUntil;
+
     public CodeBlockSpan(@NonNull MarkwonTheme theme) {
-        this(theme, null, null);
+        this(theme, null, null, null, null);
     }
 
     /**
+     * @param code      original source of the block — what the copy button hands to the host,
+     *                  see {@link #getCode()}. May be {@code null} when the caller does not
+     *                  have it (the button then does nothing).
+     * @param copyTheme style of the copy button, or {@code null} for "no button".
      * @since 4.6.3
      */
     public CodeBlockSpan(
             @NonNull MarkwonTheme theme,
             @Nullable String language,
+            @Nullable String code,
+            @Nullable CodeBlockCopyTheme copyTheme,
             @Nullable CodeBlockScrollState scrollState) {
         this.theme = theme;
         this.language = language;
+        this.code = code;
+        this.copyTheme = copyTheme;
         this.scrollState = scrollState;
         this.scrollbarPaint.setStrokeCap(Paint.Cap.ROUND);
     }
@@ -78,6 +133,42 @@ public class CodeBlockSpan extends MetricAffectingSpan implements LeadingMarginS
     @Nullable
     public CodeBlockScrollState getScrollState() {
         return scrollState;
+    }
+
+    /**
+     * <b>Original</b> source of the block — the fenced/indented literal as the author wrote
+     * it, not the highlighted {@code Spanned}. This is what the copy button hands to the host,
+     * which then decides what to do with it.
+     *
+     * @since 4.6.3
+     */
+    @Nullable
+    public String getCode() {
+        return code;
+    }
+
+    /**
+     * Whether {@code (x, y)} — in <b>Layout</b> coordinates, the space
+     * {@code CodeBlockScrollHelper} converts a touch into — lands on the copy button of this
+     * block. {@code false} for every block that has the button disabled or not drawn yet.
+     *
+     * @since 4.6.3
+     */
+    public boolean hitCopy(float x, float y) {
+        return copyBounds.width() > 0F
+                && copyBounds.height() > 0F
+                && copyBounds.contains(x, y);
+    }
+
+    /**
+     * Makes the copy button show {@link CodeBlockCopyTheme#getSuccessText()} for the next
+     * {@code durationMs} milliseconds. The caller owns the repaint (and the one that ends the
+     * feedback) — see {@code CodeBlockScrollHelper}.
+     *
+     * @since 4.6.3
+     */
+    public void showCopyFeedback(long durationMs) {
+        copyFeedbackUntil = SystemClock.uptimeMillis() + durationMs;
     }
 
     @Override
@@ -190,7 +281,7 @@ public class CodeBlockSpan extends MetricAffectingSpan implements LeadingMarginS
         }
 
         if (firstLine) {
-            drawHeader(c, p, left, top);
+            drawHeader(c, p, left, right, top);
         }
 
         if (lastLine) {
@@ -199,7 +290,7 @@ public class CodeBlockSpan extends MetricAffectingSpan implements LeadingMarginS
     }
 
     /**
-     * Language label of the block, drawn inside the reserved header row.
+     * Content of the header row: the language label on the left, the copy button on the right.
      *
      * <p>The row carries <b>no fill of its own</b> — the block background
      * ({@code codeBlockBackgroundColor}) already covers it, and a dedicated
@@ -210,10 +301,12 @@ public class CodeBlockSpan extends MetricAffectingSpan implements LeadingMarginS
      * {@code codeBlockTextSize} / {@code codeBlockTextColor} when they are configured and
      * leaves both alone otherwise — so an unconfigured label simply follows the code text.
      *
-     * <p><b>No row, no label.</b> A height that was not configured (or was set to {@code 0})
+     * <p><b>No row, no content.</b> A height that was not configured (or was set to {@code 0})
      * resolves to {@code 0} — there is no header row at all, the same opt-in rule as the
-     * scrollbar. The row then collapses to zero height, so a label painted here would not have
-     * a background to sit on: it is centred on a zero-height row, which puts half of the glyphs
+     * scrollbar. The only exception is an enabled copy button, which brings the row into
+     * existence on its own. The row then collapses to zero height, so anything painted here
+     * would not have a background to sit on: it is centred on a zero-height row, which puts
+     * half of the glyphs
      * <em>above</em> the top edge of the block (over the previous paragraph) and the other half
      * <em>under</em> the background of the first code line (which is painted after it). Hence
      * the early return.
@@ -224,29 +317,191 @@ public class CodeBlockSpan extends MetricAffectingSpan implements LeadingMarginS
             @NonNull Canvas c,
             @NonNull Paint p,
             int left,
+            int right,
             int top) {
-
-        if (language == null || language.length() == 0) {
-            return;
-        }
 
         // seed from the block paint → an unconfigured label falls back to the code block
         // text color/size instead of to a hardcoded value
         headerPaint.set(p);
         theme.applyCodeBlockHeaderStyle(headerPaint);
 
-        // NB: the resolved height is never smaller than a line of text, so centring the label
-        // in the row can never clip it — and a height of 0 means "no row", in which case there
-        // is nothing to paint at all.
-        final float height = theme.getCodeBlockHeaderHeight(p);
+        // NB: the height comes from the resolver shared with CodeBlockLineSpan#getSize, so the
+        // row and its content can never disagree. 0 means "no row" (or "row with nothing in
+        // it") and there is nothing to paint at all.
+        final float height = CodeBlockLineSpan.headerHeight(theme, language, copyTheme, headerPaint);
         if (height <= 0F) {
             return;
         }
 
-        final Paint.FontMetrics fm = headerPaint.getFontMetrics();
-        final float baseline = top + height / 2F - (fm.ascent + fm.descent) / 2F;
+        final float padding = theme.getCodeBlockPadding();
 
-        c.drawText(language, left + theme.getCodeBlockPadding(), baseline, headerPaint);
+        final boolean hasLanguage = language != null && language.length() > 0;
+        if (hasLanguage) {
+            final Paint.FontMetrics fm = headerPaint.getFontMetrics();
+            final float baseline = top + height / 2F - (fm.ascent + fm.descent) / 2F;
+            c.drawText(language, left + padding, baseline, headerPaint);
+        }
+
+        if (copyTheme != null && copyTheme.isEnabled()) {
+            drawCopy(c, copyTheme, right - padding, top, height);
+        }
+    }
+
+    /**
+     * Copy button, pinned to the right end of the header row and vertically centred in it.
+     *
+     * <p>What is drawn, in order of precedence:
+     * <ol>
+     *     <li>the <b>success label</b> ({@link CodeBlockCopyTheme#getSuccessText()}) — for a
+     *     moment right after a tap, see {@link #showCopyFeedback(long)};</li>
+     *     <li>the configured {@link CodeBlockCopyTheme#getIcon() icon};</li>
+     *     <li>the configured {@link CodeBlockCopyTheme#getText() label};</li>
+     *     <li>the <b>built-in</b> vector — the common "two stacked sheets" copy glyph, drawn
+     *     with the paint only, so the library needs neither a drawable resource nor an
+     *     {@code appcompat} dependency (it is {@code compileOnly} here).</li>
+     * </ol>
+     *
+     * <p>Whatever ends up being drawn, the touch target recorded in {@link #copyBounds} spans
+     * the full height of the row and is widened by {@code codeBlockPadding} on both sides.
+     *
+     * @since 4.6.3
+     */
+    private void drawCopy(
+            @NonNull Canvas c,
+            @Nullable CodeBlockCopyTheme copyTheme,
+            float rightEdge,
+            int top,
+            float height) {
+
+        if (copyTheme == null) {
+            return;
+        }
+
+        final String successText = copyTheme.getSuccessText();
+        final boolean feedback = copyFeedbackUntil > SystemClock.uptimeMillis()
+                && successText != null
+                && successText.length() > 0;
+
+        Drawable icon = null;
+        String label = null;
+        if (feedback) {
+            label = successText;
+        } else {
+            icon = copyTheme.getIcon();
+            if (icon != null
+                    && (icon.getIntrinsicWidth() <= 0 || icon.getIntrinsicHeight() <= 0)) {
+                // a drawable that cannot size itself would be laid out as 0x0
+                icon = null;
+            }
+            if (icon == null) {
+                label = copyTheme.getText();
+                if (label != null && label.length() == 0) {
+                    label = null;
+                }
+            }
+        }
+
+        copyPaint.set(headerPaint);
+        copyTheme.applyTextStyle(copyPaint);
+
+        final Paint.FontMetrics fm = copyPaint.getFontMetrics();
+        // the label sets the size of the button; the icon and the built-in vector follow it,
+        // so switching between text and icon never changes the visual weight of the button
+        final float contentHeight = Math.min(fm.descent - fm.ascent, height);
+        final float contentWidth = label != null
+                ? copyPaint.measureText(label)
+                : Math.max(1F, contentHeight);
+
+        final float centerY = top + height / 2F;
+        final float contentRight = rightEdge;
+        final float contentLeft = contentRight - contentWidth;
+        final float contentTop = centerY - contentHeight / 2F;
+        final float contentBottom = centerY + contentHeight / 2F;
+
+        if (label != null) {
+            copyPaint.setStyle(Paint.Style.FILL);
+            final float baseline = centerY - (fm.ascent + fm.descent) / 2F;
+            c.drawText(label, contentLeft, baseline, copyPaint);
+        } else if (icon != null) {
+            icon.setBounds(
+                    Math.round(contentLeft),
+                    Math.round(contentTop),
+                    Math.round(contentRight),
+                    Math.round(contentBottom));
+            icon.draw(c);
+        } else {
+            drawCopyIcon(c, contentLeft, contentTop, contentRight, contentBottom);
+        }
+
+        // NB: the whole row on the right is the target, not just the glyph — and it stops at
+        // the right edge of the block (rightEdge is already inset by the padding, adding it
+        // back lands exactly on the block edge).
+        final float inset = theme.getCodeBlockPadding();
+        copyBounds.set(contentLeft - inset, top, contentRight + inset, top + height);
+    }
+
+    /**
+     * Built-in copy glyph: two rounded sheets, the back one (bottom-right) drawn whole and the
+     * front one (top-left) drawn <b>open</b>, skipping the two edges the back sheet already
+     * covers.
+     *
+     * <p>Why not just fill the front sheet with the block color instead: that color is usually
+     * translucent (default = text color × 25%), so painting it twice in the overlap would show
+     * as a darker patch. Leaving the hidden edges out also keeps the glyph readable at the
+     * small size a header row can afford.
+     *
+     * @since 4.6.3
+     */
+    private void drawCopyIcon(
+            @NonNull Canvas c,
+            float left,
+            float top,
+            float right,
+            float bottom) {
+
+        final float side = Math.min(right - left, bottom - top);
+        if (side <= 0F) {
+            return;
+        }
+
+        final float stroke = Math.max(1F, side * 0.1F);
+        final float half = stroke / 2F;
+        final float offset = side * 0.26F;
+        final float radius = side * 0.16F;
+
+        // ObjectsPool's path is free by now: the background of this line was drawn with it
+        // before the header was
+        path.reset();
+        path.addRoundRect(
+                left + half + offset, top + half,
+                right - half, bottom - half - offset,
+                radius, radius, Path.Direction.CW);
+
+        copyPaint.setStyle(Paint.Style.STROKE);
+        copyPaint.setStrokeWidth(stroke);
+        copyPaint.setStrokeCap(Paint.Cap.ROUND);
+        copyPaint.setStrokeJoin(Paint.Join.ROUND);
+        copyPaint.setPathEffect(null);
+        c.drawPath(path, copyPaint);
+
+        // front sheet — open path: start on the (visible) sliver of the top edge, go down the
+        // left side, along the bottom and up the right side, stopping where the back sheet
+        // begins
+        final float l = left + half;
+        final float t = top + half + offset;
+        final float r = right - half - offset;
+        final float b = bottom - half;
+
+        path.reset();
+        path.moveTo(l + offset, t);
+        path.lineTo(l + radius, t);
+        path.quadTo(l, t, l, t + radius);
+        path.lineTo(l, b - radius);
+        path.quadTo(l, b, l + radius, b);
+        path.lineTo(r - radius, b);
+        path.quadTo(r, b, r, b - radius);
+        path.lineTo(r, b - offset);
+        c.drawPath(path, copyPaint);
     }
 
     /**

@@ -1,5 +1,8 @@
 package io.noties.markwon.sample;
 
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
 import android.os.Handler;
@@ -297,8 +300,20 @@ public class MainActivity extends AppCompatActivity {
                 // GFM 表格，尺寸见 DefaultTheme#tableTheme
                 .usePlugin(TablePlugin.create(DefaultTheme.tableTheme(this)))
                 // 代码块横向滚动：不可换行 + 顶部语言栏 + 底部滚动条
-                // 开关在 DefaultTheme.CODE_BLOCK_SCROLLABLE，相关尺寸/颜色也在那里
-                .usePlugin(DefaultTheme.codeBlockScrollPlugin())
+                // 开关在 DefaultTheme.CODE_BLOCK_SCROLLABLE，相关尺寸/颜色也在那里。
+                // 语言栏右侧还有「复制」按钮 —— 样式和行为都是这个插件自己的配置
+                // （DefaultTheme#codeBlockScrollPlugin / codeBlockCopyTheme），不经过 MarkwonTheme。
+                // 注意：库只把「哪个代码块被点了」+ 原文交出来，剪贴板由宿主自己写，
+                // 不接这个 listener 按钮就是个装饰。
+                .usePlugin(DefaultTheme.codeBlockScrollPlugin(this)
+                        .onCodeBlockCopy((textView, code) -> {
+                            final ClipboardManager manager = (ClipboardManager)
+                                    getSystemService(Context.CLIPBOARD_SERVICE);
+                            if (manager != null) {
+                                manager.setPrimaryClip(ClipData.newPlainText(null, code));
+                            }
+                            Log.i(TAG, "code block copied, length=" + code.length());
+                        }))
                 // 自定义分隔符：==高亮== 与 ++下划线++（示例扩展，高亮色见 DefaultTheme）
                 .usePlugin(DefaultTheme.simpleExtPlugin())
                 // LaTeX 公式：$$块级$$ 与 $行内$（显示开关见 DefaultTheme.LATEX_*）

@@ -7,6 +7,7 @@ import android.text.style.ReplacementSpan;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import io.noties.markwon.core.CodeBlockCopyTheme;
 import io.noties.markwon.core.MarkwonTheme;
 import io.noties.markwon.core.scroll.CodeBlockScrollState;
 
@@ -22,9 +23,11 @@ import io.noties.markwon.core.scroll.CodeBlockScrollState;
  *
  * <ul>
  *     <li>{@link #TYPE_HEADER} — the leading sentinel line, reserves room for the header
- *     (language label). Nothing is drawn here, {@link CodeBlockSpan} paints the header itself.
- *     A block <b>without</b> an info string has nothing to put in that row, so it reserves
- *     <b>no height at all</b> — see {@link #CodeBlockLineSpan(MarkwonTheme, CodeBlockScrollState, int, String)};</li>
+ *     (the language label on the left, the copy button on the right). Nothing is drawn here,
+ *     {@link CodeBlockSpan} paints the header itself.
+ *     A block <b>without</b> an info string and with the copy button disabled has nothing to
+ *     put in that row, so it reserves <b>no height at all</b> — see
+ *     {@link #CodeBlockLineSpan(MarkwonTheme, CodeBlockScrollState, int, String)};</li>
  *     <li>{@link #TYPE_CODE} — an actual code line: never wrapped, clipped to the viewport
  *     and translated by {@code -scrollX};</li>
  *     <li>{@link #TYPE_FOOTER} — the trailing sentinel line, reserves room for the
@@ -53,14 +56,29 @@ public class CodeBlockLineSpan extends ReplacementSpan {
     @Nullable
     private final String language;
 
+    /**
+     * Copy-button style of the header row, or {@code null} for "no button".
+     *
+     * <p>Not a constructor parameter: it is pushed in by {@code CodeBlockScrollPlugin}
+     * ({@code CodeBlockScrollHelper#injectCopy}) right before the text is laid out, because the
+     * row is created deep inside {@code CorePlugin}, which knows nothing about the plugin. The
+     * value is what decides whether a language-less block still gets a header row — see
+     * {@link #headerHeight(MarkwonTheme, String, CodeBlockCopyTheme, Paint)}.
+     *
+     * @since 4.6.3
+     */
+    @Nullable
+    private CodeBlockCopyTheme copyTheme;
+
     private float lineWidth = -1F;
 
     /**
      * @param language the language label a {@link #TYPE_HEADER} row is reserving room for.
-     *                 When it is {@code null} or empty the row has no content to show and
-     *                 therefore <b>reserves no height at all</b> — otherwise every
-     *                 language-less block (including all indented code blocks) would carry an
-     *                 empty strip at the top. Ignored by the other two types.
+     *                 When it is {@code null} or empty <b>and</b> no copy button is configured
+     *                 the row has no content to show and therefore <b>reserves no height at
+     *                 all</b> — otherwise every language-less block (including all indented
+     *                 code blocks) would carry an empty strip at the top. Ignored by the other
+     *                 two types.
      * @since 4.6.3
      */
     public CodeBlockLineSpan(
@@ -79,14 +97,57 @@ public class CodeBlockLineSpan extends ReplacementSpan {
     }
 
     /**
-     * Whether the header row has something to show — the very same condition
-     * {@link CodeBlockSpan} uses to decide if it paints the language label, so that a row is
-     * never reserved for a label that is not going to be drawn.
+     * Hands in the copy-button style of this block. Called once per {@code setText} (by
+     * {@code CodeBlockScrollHelper#injectCopy}, on behalf of {@code CodeBlockScrollPlugin}),
+     * before the text is measured — the row height depends on it.
      *
      * @since 4.6.3
      */
-    private boolean hasHeaderContent() {
-        return language != null && language.length() > 0;
+    public void setCopyTheme(@Nullable CodeBlockCopyTheme copyTheme) {
+        this.copyTheme = copyTheme;
+    }
+
+    /**
+     * Height of the header row, resolved against {@code paint}. <b>The single source of truth
+     * for that number</b>: both the measurement here and the painting in
+     * {@link CodeBlockSpan#drawHeader} call it, so a row and its content can never disagree
+     * about their own height.
+     *
+     * <ul>
+     *     <li>a height that was <b>not configured</b> ({@code UNSET}) as well as an explicit
+     *     {@code 0} mean "no header row" — no room is reserved and nothing is painted. The row
+     *     is opt-in, same rule as {@code isCodeBlockScrollbarEnabled()};</li>
+     *     <li>any positive height is honoured, but raised to the height of a line of text when
+     *     it is too short for its content — a row that clips its own content is never
+     *     useful;</li>
+     *     <li><b>exception:</b> an <em>unconfigured</em> height still resolves to one line of
+     *     text when a copy button is enabled — the button needs a row to live in, and turning
+     *     the feature on should not require configuring the row by hand. An explicit {@code 0}
+     *     still wins and means "no row".</li>
+     * </ul>
+     *
+     * @since 4.6.3
+     */
+    static int headerHeight(
+            @NonNull MarkwonTheme theme,
+            @Nullable String language,
+            @Nullable CodeBlockCopyTheme copyTheme,
+            @NonNull Paint paint) {
+
+        final boolean hasLanguage = language != null && language.length() > 0;
+        final boolean hasCopy = copyTheme != null && copyTheme.isEnabled();
+        final int lineHeight = Math.round(paint.descent() - paint.ascent());
+        final int configured = theme.getCodeBlockHeaderHeight();
+
+        if (configured > 0) {
+            // a configured row exists for its content only — but when there is none it stays
+            // collapsed instead of becoming an empty strip
+            return (hasLanguage || hasCopy) ? Math.max(configured, lineHeight) : 0;
+        }
+
+        // not configured: only the copy button can conjure the row up on its own, the language
+        // label keeps following the original opt-in rule
+        return hasCopy ? lineHeight : 0;
     }
 
     /**
@@ -139,13 +200,12 @@ public class CodeBlockLineSpan extends ReplacementSpan {
             if (fm != null) {
                 // NB: no hardcoded pixel defaults anywhere — a size that resolves to 0 means
                 // "this row does not exist": it collapses (ascent == descent == 0) and
-                // contributes nothing. For the header that is the case when the height was not
-                // configured (or was set to 0) and when there is no language to display.
-                // NB: the header height is resolved *here*, at measure time, and
-                // CodeBlockSpan#drawHeader resolves it again with the same (code block styled)
-                // paint — both must agree, otherwise the row and the label drift apart.
+                // contributes nothing.
+                // NB: the header height comes from the shared resolver so that this measurement
+                // and CodeBlockSpan#drawHeader can never drift apart (they used to resolve the
+                // same number twice, with their own ideas about the copy button).
                 final int height = type == TYPE_HEADER
-                        ? (hasHeaderContent() ? theme.getCodeBlockHeaderHeight(paint) : 0)
+                        ? headerHeight(theme, language, copyTheme, paint)
                         : footerHeight();
                 fm.ascent = -height;
                 fm.descent = 0;
