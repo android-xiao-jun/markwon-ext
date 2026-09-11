@@ -53,6 +53,8 @@ import io.noties.markwon.core.factory.LinkSpanFactory;
 import io.noties.markwon.core.factory.ListItemSpanFactory;
 import io.noties.markwon.core.factory.StrongEmphasisSpanFactory;
 import io.noties.markwon.core.factory.ThematicBreakSpanFactory;
+import io.noties.markwon.core.scroll.CodeBlockScrollState;
+import io.noties.markwon.core.spans.CodeBlockLineSpan;
 import io.noties.markwon.core.spans.OrderedListItemSpan;
 import io.noties.markwon.core.spans.TextViewSpan;
 import io.noties.markwon.image.ImageProps;
@@ -362,20 +364,100 @@ public class CorePlugin extends AbstractMarkwonPlugin {
 
         final int length = visitor.length();
 
-        visitor.builder()
+        final SpannableBuilder builder = visitor.builder();
+
+        builder
                 .append('\u00a0').append('\n')
                 .append(visitor.configuration().syntaxHighlight().highlight(info, code));
 
+        // NB: captured before `ensureNewLine` — the trailing `\n` and the sentinel `\u00a0`
+        // must stay outside of the code lines
+        final int contentEnd = builder.length();
+
         visitor.ensureNewLine();
 
-        visitor.builder().append('\u00a0');
+        builder.append('\u00a0');
 
         // @since 4.1.1
         CoreProps.CODE_BLOCK_INFO.set(visitor.renderProps(), info);
 
+        // @since 4.6.3
+        final MarkwonTheme theme = visitor.configuration().theme();
+        if (theme.isCodeBlockScrollable()) {
+            applyCodeBlockLineSpans(visitor, theme, length, length + 2, contentEnd, info);
+        }
+
         visitor.setSpansForNodeOptional(node, length);
 
         visitor.blockEnd(node);
+    }
+
+    /**
+     * Takes over every line of a scrollable code block: the leading sentinel line becomes the
+     * header row, the trailing one the footer row (scrollbar), and each code line gets its own
+     * {@link io.noties.markwon.core.spans.CodeBlockLineSpan} so it is never wrapped and can be
+     * translated by the shared scroll offset.
+     *
+     * @since 4.6.3
+     */
+    private static void applyCodeBlockLineSpans(
+            @NonNull MarkwonVisitor visitor,
+            @NonNull MarkwonTheme theme,
+            int blockStart,
+            int contentStart,
+            int contentEnd,
+            @Nullable String language) {
+
+        final SpannableBuilder builder = visitor.builder();
+        final CodeBlockScrollState state = new CodeBlockScrollState();
+
+        // read back by CodeBlockSpanFactory when it creates the block span
+        CoreProps.CODE_BLOCK_SCROLL_STATE.set(visitor.renderProps(), state);
+
+        // leading `\u00a0` -> header row (the language label is drawn by CodeBlockSpan).
+        // NB: the language is handed to the row as well — a block without an info string has
+        // nothing to show there, and the row must then reserve no height at all instead of
+        // leaving an empty strip on top of every language-less block.
+        builder.setSpan(
+                new CodeBlockLineSpan(
+                        theme,
+                        state,
+                        CodeBlockLineSpan.TYPE_HEADER,
+                        language),
+                blockStart,
+                contentStart - 1,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+
+        // one span per code line; empty lines (a trailing `\n` produces one) are skipped
+        // so that the background of CodeBlockSpan stays uninterrupted
+        int lineStart = contentStart;
+        for (int i = contentStart; i <= contentEnd; i++) {
+            if (i == contentEnd || builder.charAt(i) == '\n') {
+                if (i > lineStart) {
+                    builder.setSpan(
+                            new CodeBlockLineSpan(
+                                    theme,
+                                    state,
+                                    CodeBlockLineSpan.TYPE_CODE,
+                                    null),
+                            lineStart,
+                            i,
+                            Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                }
+                lineStart = i + 1;
+            }
+        }
+
+        // trailing `\u00a0` -> footer row (scrollbar + bottom padding)
+        builder.setSpan(
+                new CodeBlockLineSpan(
+                        theme,
+                        state,
+                        CodeBlockLineSpan.TYPE_FOOTER,
+                        null),
+                builder.length() - 1,
+                builder.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
     }
 
     private static void bulletList(@NonNull MarkwonVisitor.Builder builder) {

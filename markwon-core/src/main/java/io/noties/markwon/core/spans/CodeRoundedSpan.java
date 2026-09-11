@@ -5,9 +5,7 @@ import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.RectF;
 import android.os.Build;
-import android.text.StaticLayout;
 import android.text.TextPaint;
-import android.text.TextUtils;
 import android.text.style.ReplacementSpan;
 
 import androidx.annotation.NonNull;
@@ -26,20 +24,11 @@ import io.noties.markwon.core.MarkwonTheme;
  */
 public class CodeRoundedSpan extends ReplacementSpan {
 
-    private static final float HORIZONTAL_PADDING_PX = 4F;
-
     private final MarkwonTheme theme;
     private final RectF rectF = new RectF();
     private final Path path = new Path();
     private final Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final TextPaint measurePaint = new TextPaint();
-
-    // Re-entrancy guard: our span covers the measured range, so
-    // StaticLayout.getDesiredWidth on a sub-sequence containing this span
-    // will call getSize again (getDesiredWidth -> getSize -> getDesiredWidth
-    // -> ...). When the guard is up we fall back to the char[] overload of
-    // Paint#measureText, which never resolves spans and breaks the cycle.
-    private boolean measuring;
+    private final TextPaint textPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
 
     public CodeRoundedSpan(@NonNull MarkwonTheme theme) {
         this.theme = theme;
@@ -59,19 +48,48 @@ public class CodeRoundedSpan extends ReplacementSpan {
         theme.applyCodeTextStyle(p);
     }
 
+    /**
+     * The framework never calls {@link #updateMeasureState(TextPaint)} /
+     * {@link #updateDrawState(TextPaint)} on the span that <em>is</em> the replacement
+     * ({@code TextLine#handleRun} only applies the other {@code MetricAffectingSpan}s of the
+     * range), so the inline-code typeface/size has to be applied by us — otherwise the code is
+     * measured and drawn with the surrounding text style and stops matching
+     * {@link CodeSpan}, which is where the theme's normal code styling lives.
+     *
+     * @return the paint the range must be measured/drawn with
+     */
+    @NonNull
+    private TextPaint resolvePaint(@NonNull Paint paint) {
+        textPaint.set(paint);
+        apply(textPaint);
+        return textPaint;
+    }
+
+    /**
+     * Horizontal inset between the inline-code text and the edge of its background.
+     * Comes from the theme ({@link MarkwonTheme#getCodeHorizontalPadding()}) so the host
+     * app can match its own design spec instead of a hardcoded value.
+     */
+    private float horizontalPadding() {
+        return theme.getCodeHorizontalPadding();
+    }
+
     @Override
     public int getSize(
             @NonNull Paint paint,
             CharSequence text,
             int start,
             int end,
-            android.graphics.Paint.FontMetricsInt fm) {
+            Paint.FontMetricsInt fm) {
+
+        final TextPaint codePaint = resolvePaint(paint);
 
         if (fm != null) {
-            paint.getFontMetricsInt(fm);
+            codePaint.getFontMetricsInt(fm);
         }
 
-        return measureTextWidth(paint, text, start, end) + (int) Math.ceil(HORIZONTAL_PADDING_PX * 2F);
+        return (int) Math.ceil(measureTextWidth(codePaint, text, start, end)
+                + horizontalPadding() * 2F);
     }
 
     @Override
@@ -86,10 +104,12 @@ public class CodeRoundedSpan extends ReplacementSpan {
             int bottom,
             @NonNull Paint paint) {
 
-        final int totalWidth = measureTextWidth(paint, text, start, end)
-                + (int) Math.ceil(HORIZONTAL_PADDING_PX * 2F);
+        final TextPaint codePaint = resolvePaint(paint);
 
-        backgroundPaint.setColor(theme.getCodeBackgroundColor(paint));
+        final float totalWidth = measureTextWidth(codePaint, text, start, end)
+                + horizontalPadding() * 2F;
+
+        backgroundPaint.setColor(theme.getCodeBackgroundColor(codePaint));
         backgroundPaint.setStyle(Paint.Style.FILL);
 
         final int radius = theme.getCodeBackgroundRadius();
@@ -105,32 +125,25 @@ public class CodeRoundedSpan extends ReplacementSpan {
             canvas.drawRect(x, top, x + totalWidth, bottom, backgroundPaint);
         }
 
-        // Now draw the actual glyphs (text drawing itself honours nested spans).
-        canvas.drawText(text, start, end, x + HORIZONTAL_PADDING_PX, y, paint);
+        // Now draw the actual glyphs.
+        // NB: `Canvas#drawText(CharSequence, ...)` — what this used to do — silently drops
+        // EVERY span: a SpannableStringBuilder goes through its char[] branch and even the
+        // SpannedString branch hands a plain String to the native layer. Nested formatting
+        // (emphasis, a link inside the inline code, syntax highlighting) must therefore be
+        // walked explicitly. SpannedTextRenderer also measures through char[], which is what
+        // keeps getSize out of an infinite recursion — StaticLayout#getDesiredWidth would
+        // call getSize right back on the very range this span covers.
+        SpannedTextRenderer.INSTANCE.render(
+                canvas,
+                text,
+                start,
+                end,
+                x + horizontalPadding(),
+                y,
+                codePaint);
     }
 
-    /**
-     * Measures the width of the [start, end) range. Preferred path is
-     * {@link StaticLayout#getDesiredWidth(CharSequence, TextPaint)} which walks
-     * the CharSequence and handles nested formatting; a re-entrant call falls
-     * back to the span-unaware char[] measurement.
-     */
-    private int measureTextWidth(@NonNull Paint paint, @NonNull CharSequence text, int start, int end) {
-        measurePaint.set(paint);
-        if (measuring) {
-            return (int) Math.ceil(rawMeasure(text, start, end));
-        }
-        measuring = true;
-        try {
-            return (int) Math.ceil(StaticLayout.getDesiredWidth(text.subSequence(start, end), measurePaint));
-        } finally {
-            measuring = false;
-        }
-    }
-
-    private float rawMeasure(@NonNull CharSequence text, int start, int end) {
-        final char[] buffer = new char[end - start];
-        TextUtils.getChars(text, start, end, buffer, 0);
-        return measurePaint.measureText(buffer, 0, buffer.length);
+    private float measureTextWidth(@NonNull Paint paint, @NonNull CharSequence text, int start, int end) {
+        return SpannedTextRenderer.INSTANCE.render(null, text, start, end, 0F, 0F, paint);
     }
 }

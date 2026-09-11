@@ -7,10 +7,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
-import android.text.style.BackgroundColorSpan;
-import android.text.style.UnderlineSpan;
 import android.util.Log;
-import android.util.TypedValue;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -31,15 +28,10 @@ import java.io.InputStream;
 import java.nio.charset.Charset;
 import java.util.Objects;
 
-import io.noties.markwon.AbstractMarkwonPlugin;
 import io.noties.markwon.Markwon;
 import io.noties.markwon.MarkwonAppendState;
-import io.noties.markwon.core.MarkwonTheme;
-import io.noties.markwon.ext.latex.JLatexMathPlugin;
 import io.noties.markwon.ext.strikethrough.StrikethroughPlugin;
 import io.noties.markwon.ext.tables.TablePlugin;
-import io.noties.markwon.ext.tables.TableTheme;
-import io.noties.markwon.ext.tasklist.TaskListPlugin;
 import io.noties.markwon.html.HtmlPlugin;
 import io.noties.markwon.image.AsyncDrawable;
 import io.noties.markwon.image.ImagesPlugin;
@@ -49,8 +41,6 @@ import io.noties.markwon.image.glide.GlideImagesPlugin;
 import io.noties.markwon.image.network.NetworkSchemeHandler;
 import io.noties.markwon.inlineparser.MarkwonInlineParserPlugin;
 import io.noties.markwon.linkify.LinkifyPlugin;
-import io.noties.markwon.simple.ext.SimpleExtPlugin;
-import io.noties.markwon.syntax.Prism4jThemeDarkula;
 import io.noties.markwon.syntax.SyntaxHighlightPlugin;
 import io.noties.prism4j.Prism4j;
 
@@ -302,38 +292,26 @@ public class MainActivity extends AppCompatActivity {
                 .usePlugin(LinkifyPlugin.create())
                 // ~~删除线~~
                 .usePlugin(StrikethroughPlugin.create())
-                // - [ ] / - [x] 任务列表
-                .usePlugin(TaskListPlugin.create(this))
-                // GFM 表格（tableCornerRadius 给表格四个外角设置圆角，单位 px）
-                .usePlugin(TablePlugin.create(TableTheme.buildWithDefaults(this)
-                        .tableCornerRadius((int) dp2px(8))
-                        .build()))
-                // 行内代码 + 代码块背景圆角（codeBackgroundRadius / codeBlockBackgroundRadius）
-                .usePlugin(new AbstractMarkwonPlugin() {
-                    @Override
-                    public void configureTheme(@NonNull MarkwonTheme.Builder builder) {
-                        builder
-                                .codeBackgroundRadius((int) dp2px(4))
-                                .codeBlockBackgroundRadius((int) dp2px(6));
-                    }
-                })
-                // 自定义分隔符：==高亮== 与 ++下划线++
-                .usePlugin(SimpleExtPlugin.create(plugin -> {
-                    plugin.addExtension(2, '=', (configuration, props) ->
-                            new BackgroundColorSpan(0xFFFFF176));
-                    plugin.addExtension(2, '+', (configuration, props) ->
-                            new UnderlineSpan());
-                }))
-                // LaTeX 公式：$$块级$$ 与 $行内$（行内解析默认关闭，需显式打开）
-                .usePlugin(JLatexMathPlugin.create(sp2px(16), config ->
-                        config
-                                .inlinesEnabled(true)
-                                .blocksEnabled(true)))
+                // - [ ] / - [x] 任务列表，复选框配色见 DefaultTheme#taskListPlugin
+                .usePlugin(DefaultTheme.taskListPlugin(this))
+                // GFM 表格，尺寸见 DefaultTheme#tableTheme
+                .usePlugin(TablePlugin.create(DefaultTheme.tableTheme(this)))
+                // 代码块横向滚动：不可换行 + 顶部语言栏 + 底部滚动条
+                // 开关在 DefaultTheme.CODE_BLOCK_SCROLLABLE，相关尺寸/颜色也在那里
+                .usePlugin(DefaultTheme.codeBlockScrollPlugin())
+                // 自定义分隔符：==高亮== 与 ++下划线++（示例扩展，高亮色见 DefaultTheme）
+                .usePlugin(DefaultTheme.simpleExtPlugin())
+                // LaTeX 公式：$$块级$$ 与 $行内$（显示开关见 DefaultTheme.LATEX_*）
+                .usePlugin(DefaultTheme.latexPlugin(this))
                 // 代码块高亮，语法定义见 SampleGrammarLocator，未命中的语言回退到 java
                 .usePlugin(SyntaxHighlightPlugin.create(
                         new Prism4j(new SampleGrammarLocator()),
-                        Prism4jThemeDarkula.create(0xFF2B2B2B),
-                        "java"));
+                        DefaultTheme.syntaxTheme(),
+                        "java"))
+                // 主题必须最后注册：MarkwonBuilderImpl 按注册顺序累加 configureTheme，
+                // 后注册的覆盖先注册的，而 SyntaxHighlightPlugin 会写 codeBlockBackgroundColor
+                // / codeBlockTextColor。
+                .usePlugin(DefaultTheme.markwonPlugin(this));
 
         return builder.build();
     }
@@ -390,16 +368,6 @@ public class MainActivity extends AppCompatActivity {
                 return ContextCompat.getDrawable(this, R.drawable.ic_image_error);
             });
         });
-    }
-
-    private float sp2px(float sp) {
-        return TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_SP, sp, getResources().getDisplayMetrics());
-    }
-
-    private float dp2px(float dp) {
-        return TypedValue.applyDimension(
-                TypedValue.COMPLEX_UNIT_DIP, dp, getResources().getDisplayMetrics());
     }
 
     /**

@@ -1,6 +1,7 @@
 package io.noties.markwon.core;
 
 import io.noties.markwon.Prop;
+import io.noties.markwon.core.scroll.CodeBlockScrollState;
 
 /**
  * @since 3.0.0
@@ -23,6 +24,16 @@ public abstract class CoreProps {
      * @since 4.1.1
      */
     public static final Prop<String> CODE_BLOCK_INFO = Prop.of("code-block-info");
+
+    /**
+     * Scroll state shared by all the lines of the code block currently being rendered.
+     * Set by {@code CorePlugin} right before the spans are applied, read by
+     * {@code CodeBlockSpanFactory}.
+     *
+     * @since 4.6.3
+     */
+    public static final Prop<CodeBlockScrollState> CODE_BLOCK_SCROLL_STATE =
+            Prop.of("code-block-scroll-state");
 
     public enum ListItemType {
         BULLET,
